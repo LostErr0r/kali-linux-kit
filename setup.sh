@@ -123,19 +123,6 @@ do_claude() {
     fi
 }
 
-do_warp() {
-    step "Warp (терминал, официальный .deb)"
-    # .deb с сайта сам регистрирует apt-репозиторий Warp и ключ подписи,
-    # поэтому дальнейшие обновления приходят через обычный apt upgrade.
-    local deb="${DOWNLOAD_DIR}/warp.deb"
-    local arch; arch=$(dpkg --print-architecture)   # amd64 / arm64
-    if curl -fL --retry 3 -o "$deb" "https://app.warp.dev/download?package=deb"; then
-        install_deb "$deb" && ok "Warp установлен. Запуск: warp-terminal"
-    else
-        warn "Не скачался Warp .deb (arch=$arch). Проверь вручную: https://app.warp.dev/download"
-    fi
-}
-
 do_discord() {
     step "4. Discord (официальный .deb)"
     local deb="${DOWNLOAD_DIR}/discord.deb"
@@ -168,21 +155,36 @@ do_happ() {
 }
 
 do_amnezia() {
-    step "7. AmneziaVPN"
-    # ВНИМАНИЕ: официальный установщик для Linux — это .tar с GUI-установщиком (.run/.bin),
-    # он ИНТЕРАКТИВНЫЙ, автоматом молча не ставится. Плюс по офиц. докам AmneziaVPN
-    # НЕ работает на Debian 13 (а текущая Kali основана на Debian trixie/13) —
-    # возможны проблемы. Поэтому только скачиваем и распаковываем, а запуск — руками.
+    step "7. AmneziaVPN (автоматическая установка)"
+    # GUI-зависимости для Debian 13/Kali.
     sudo apt install -y libxcb-xinerama0 libxcb-cursor0 iptables 2>/dev/null || true
-    local tar="${DOWNLOAD_DIR}/amnezia.tar"
+    # КЛЮЧЕВОЙ момент: без systemd-resolved AmneziaWG/WireGuard подключается,
+    # но DNS внутри туннеля не работает ("Подключено", а сайты не грузятся).
+    # Ставим и включаем его заранее — иначе VPN будет бесполезен.
+    sudo apt install -y systemd-resolved 2>/dev/null || true
+    sudo systemctl enable --now systemd-resolved 2>/dev/null || true
+
+    # Уже установлен? — пропускаем (идемпотентность).
+    if [[ -x /opt/AmneziaVPN/bin/AmneziaVPN ]]; then
+        ok "AmneziaVPN уже установлен (/opt/AmneziaVPN). Пропускаю установку."
+        return
+    fi
+
     local dest="${HOME}/amneziavpn-installer"
-    if gh_latest_asset "amnezia-vpn/amnezia-client" 'linux_x64\.tar$' "$tar"; then
-        mkdir -p "$dest"
-        tar -xf "$tar" -C "$dest"
-        ok "AmneziaVPN распакован в: $dest"
-        warn "Запусти установщик вручную: найди файл *.run/*.bin в $dest и выполни его."
-    else
+    mkdir -p "$dest"
+    local run="${dest}/AmneziaVPN_linux_x64.run"
+    if ! gh_latest_asset "amnezia-vpn/amnezia-client" 'linux_x64\.run$' "$run"; then
         warn "Не удалось скачать AmneziaVPN. Скачай вручную: https://github.com/amnezia-vpn/amnezia-client/releases/latest"
+        return
+    fi
+    chmod +x "$run"
+    # Полностью тихая (headless) установка через Qt Installer Framework.
+    # Ставит в /opt/AmneziaVPN, создаёт и включает systemd-сервис AmneziaVPN.service.
+    log "Ставлю AmneziaVPN в автоматическом режиме..."
+    if sudo "$run" install --accept-licenses --accept-messages --default-answer --confirm-command -t /opt/AmneziaVPN; then
+        ok "AmneziaVPN установлен. Запуск: AmneziaVPN (или из меню приложений)"
+    else
+        warn "Авто-установка не удалась — запусти установщик вручную из графической сессии: $run"
     fi
 }
 
@@ -234,8 +236,12 @@ do_deepseek() {
     fi
     log "Ставлю DeepSeek Harness (@deepseek-ai/dsh) глобально через npm..."
     if sudo npm install -g @deepseek-ai/dsh; then
-        ok "DeepSeek Harness установлен. Запуск TUI: dsh   |   веб-режим: dsh web (UI на http://127.0.0.1:3080)"
-        warn "После запуска нужно добавить API-ключ модели и выбрать рабочую папку в интерфейсе."
+        ok "DeepSeek Harness установлен."
+        log "  Запуск НЕ командой 'dsh', а с указанием профиля:"
+        log "    dsh tui                      — терминальный интерфейс"
+        log "    dsh web                      — веб-интерфейс (http://127.0.0.1:3080)"
+        log "    dsh headless \"задача\"         — разовая задача без интерфейса"
+        warn "При первом запуске нужен API-ключ DeepSeek (platform.deepseek.com) и выбор рабочей папки."
     else
         warn "Не удалось поставить @deepseek-ai/dsh. Проверь имя пакета в офиц. репозитории DeepSeek Harness."
     fi
@@ -244,14 +250,13 @@ do_deepseek() {
 # ============================================================================
 # Запуск: все шаги или только выбранные аргументами
 # ============================================================================
-ALL_STEPS=(system base claude warp discord obsidian happ amnezia hexstrike deepseek)
+ALL_STEPS=(system base claude discord obsidian happ amnezia hexstrike deepseek)
 
 run_step() {
     case "$1" in
         system)   do_system ;;
         base)     do_base ;;
         claude)   do_claude ;;
-        warp)     do_warp ;;
         discord)  do_discord ;;
         obsidian) do_obsidian ;;
         happ)     do_happ ;;
