@@ -1,278 +1,275 @@
 #!/usr/bin/env bash
 #
-# setup.sh — первичная настройка рабочей Kali Linux (в т.ч. на флэшке).
+# setup.sh — настройка рабочей Kali Linux (в т.ч. на флэшке).
 #
-# Что делает:
-#   1. Обновляет систему (apt update + full-upgrade).
-#   2. Ставит базовые инструменты (curl, wget, git, gpg и т.д.).
-#   3. Ставит приложения: Claude Desktop, Discord, Obsidian, Happ, AmneziaVPN.
-#   4. Ставит MCP-сервер HexStrike AI.
-#   5. (опционально) DeepSeek harness — см. блок в конце, нужно уточнение.
+# Модули:
+#   lib/common.sh        — переменные и помощники
+#   modules/system.sh    — обновление системы, базовые пакеты
+#   modules/apps.sh      — приложения
+#   modules/ai.sh        — AI: Claude Desktop, DeepSeek Harness, Graphify, HexStrike AI
+#   modules/settings.sh  — настройка системы (время, клавиатура, блокировка экрана)
+#   modules/custom.sh    — кастомизация (пока пусто)
+#   modules/uninstall.sh — откат (удалить/вернуть назад)
+#   skills/graphify/     — исходники и скил Graphify (копия в репозитории)
 #
 # Запуск:
-#   chmod +x setup.sh
-#   ./setup.sh                 # всё целиком
-#   ./setup.sh system claude   # только выбранные шаги (см. ниже список)
+#   ./setup.sh                      — интерактивный мастер (меню)
+#   ./setup.sh claude amnezia       — поставить только эти шаги, без меню
+#   ./setup.sh undo amnezia prompt  — откатить только эти шаги
 #
 # ВАЖНО: запускай от ОБЫЧНОГО пользователя (kali), НЕ от root.
-#        sudo скрипт попросит сам, где нужно.
 #
 set -uo pipefail
 
 # ----------------------------------------------------------------------------
-# Настройки
+# Подключение модулей
 # ----------------------------------------------------------------------------
-LOG_FILE="${HOME}/kali-setup.log"
-DOWNLOAD_DIR="$(mktemp -d /tmp/kali-setup.XXXXXX)"   # сюда качаем установщики
-HEXSTRIKE_DIR="${HOME}/tools/hexstrike-ai"           # куда клонировать hexstrike (если ставим из git)
-
-# ----------------------------------------------------------------------------
-# Вспомогательные функции
-# ----------------------------------------------------------------------------
-RED=$'\e[31m'; GREEN=$'\e[32m'; YELLOW=$'\e[33m'; BLUE=$'\e[34m'; BOLD=$'\e[1m'; RESET=$'\e[0m'
-
-log()   { echo "${BLUE}[*]${RESET} $*" | tee -a "$LOG_FILE"; }
-ok()    { echo "${GREEN}[+]${RESET} $*" | tee -a "$LOG_FILE"; }
-warn()  { echo "${YELLOW}[!]${RESET} $*" | tee -a "$LOG_FILE"; }
-err()   { echo "${RED}[x]${RESET} $*" | tee -a "$LOG_FILE"; }
-step()  { echo; echo "${BOLD}${BLUE}==== $* ====${RESET}" | tee -a "$LOG_FILE"; }
-
-# Проверка: установлена ли команда
-have() { command -v "$1" >/dev/null 2>&1; }
-
-# Проверка: установлен ли deb-пакет
-pkg_installed() { dpkg -s "$1" >/dev/null 2>&1; }
-
-# Скачать последний релизный asset с GitHub по маске имени.
-#   gh_latest_asset <owner/repo> <grep-маска> <куда-сохранить-файл>
-gh_latest_asset() {
-    local repo="$1" pattern="$2" out="$3"
-    local url
-    url=$(curl -fsSL "https://api.github.com/repos/${repo}/releases/latest" \
-        | grep -oP '"browser_download_url":\s*"\K[^"]+' \
-        | grep -iE "$pattern" | head -n1)
-    if [[ -z "$url" ]]; then
-        err "Не нашёл asset по маске '$pattern' в $repo"
-        return 1
-    fi
-    log "Качаю: $url"
-    curl -fL --retry 3 -o "$out" "$url"
-}
-
-# Поставить локальный .deb с автодотяжкой зависимостей
-install_deb() {
-    local deb="$1"
-    sudo apt install -y "$deb" || sudo apt install -y -f
-}
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "${SCRIPT_DIR}/lib/common.sh"
+for _m in system apps ai settings custom uninstall; do
+    source "${SCRIPT_DIR}/modules/${_m}.sh"
+done
+unset _m
 
 # ----------------------------------------------------------------------------
-# Подготовка
+# Данные для меню
 # ----------------------------------------------------------------------------
-if [[ "$(id -u)" -eq 0 ]]; then
-    err "Не запускай скрипт от root. Запусти от пользователя kali — sudo будет вызван сам."
-    exit 1
-fi
+CATEGORIES=(update apps ai settings custom revert)
+declare -A CAT_DESC=(
+    [update]="Обновление системы"
+    [apps]="Установка приложений"
+    [ai]="AI: модели и инструменты"
+    [settings]="Настройка системы"
+    [custom]="Кастомизация (пока пусто)"
+    [revert]="Откат (удалить / вернуть назад)"
+)
 
-if ! sudo -v; then
-    err "Нужны права sudo."
-    exit 1
-fi
-# держим sudo "живым", пока работает скрипт
-( while true; do sudo -n true; sleep 60; kill -0 "$$" 2>/dev/null || exit; done ) &
-SUDO_KEEPALIVE_PID=$!
-trap 'kill "$SUDO_KEEPALIVE_PID" 2>/dev/null; rm -rf "$DOWNLOAD_DIR"' EXIT
+# base ставится автоматически как зависимость перед приложениями
+APP_STEPS=(discord telegram obsidian happ amnezia docker)
+declare -A APP_DESC=(
+    [discord]="Discord"
+    [telegram]="Telegram"
+    [obsidian]="Obsidian"
+    [happ]="Happ (прокси-клиент)"
+    [amnezia]="AmneziaVPN"
+    [docker]="Docker (контейнеры + compose)"
+)
 
-: > "$LOG_FILE"
-log "Лог пишется в $LOG_FILE"
-log "Временные файлы: $DOWNLOAD_DIR"
+# AI: модели и инструменты (отдельная категория меню)
+AI_STEPS=(claude deepseek graphify hexstrike)
+declare -A AI_DESC=(
+    [claude]="Claude Desktop"
+    [deepseek]="DeepSeek Harness (dsh)"
+    [graphify]="Graphify (граф кодовой базы, скил /graphify)"
+    [hexstrike]="HexStrike AI (MCP-сервер)"
+)
 
-# ============================================================================
-# ШАГИ
-# ============================================================================
+SETTINGS_STEPS=(time keyboard nolock)
+declare -A SETTINGS_DESC=(
+    [time]="Часовой пояс (выбор из списка), синхронизация, секунды в часах"
+    [keyboard]="Вторая раскладка Russian, переключение Win+Space"
+    [nolock]="Не блокировать экран по времени (никогда)"
+)
 
-do_system() {
-    step "1. Обновление системы"
-    sudo apt update
-    sudo apt full-upgrade -y
-    sudo apt autoremove -y
-    ok "Система обновлена"
-}
+# Кастомизация — пока пусто, пункты добавим позже
+CUSTOM_STEPS=()
+declare -A CUSTOM_DESC=()
 
-do_base() {
-    step "2. Базовые инструменты"
-    sudo apt install -y \
-        curl wget git gnupg ca-certificates apt-transport-https \
-        software-properties-common jq unzip build-essential \
-        python3 python3-pip python3-venv pipx
-    ok "Базовые пакеты установлены"
-}
+# Пункты, которые в меню по умолчанию НЕ отмечены (тяжёлые/меняющие окружение)
+DEFAULT_OFF=()
 
-do_claude() {
-    step "3. Claude Desktop (официальный apt-репозиторий Anthropic)"
-    # Ключ подписи
-    sudo curl -fsSLo /usr/share/keyrings/claude-desktop-archive-keyring.asc \
-        https://downloads.claude.ai/claude-desktop/key.asc
-    # Регистрируем репозиторий
-    echo "deb [arch=amd64,arm64 signed-by=/usr/share/keyrings/claude-desktop-archive-keyring.asc] https://downloads.claude.ai/claude-desktop/apt/stable stable main" \
-        | sudo tee /etc/apt/sources.list.d/claude-desktop.list >/dev/null
-    sudo apt update
-    if sudo apt install -y claude-desktop; then
-        ok "Claude Desktop установлен. Запуск: claude-desktop (войди в аккаунт Anthropic)"
-    else
-        warn "Не удалось поставить из репозитория. Проверь доступ к downloads.claude.ai."
-    fi
-}
+# Что можно откатить (приложения + настройка системы; обновление системы откату не подлежит)
+REVERT_STEPS=(claude discord telegram obsidian happ amnezia docker deepseek graphify hexstrike time keyboard nolock)
+declare -A REVERT_DESC=(
+    [claude]="Удалить Claude Desktop"
+    [discord]="Удалить Discord"
+    [telegram]="Удалить Telegram"
+    [obsidian]="Удалить Obsidian"
+    [happ]="Удалить Happ"
+    [amnezia]="Удалить AmneziaVPN"
+    [hexstrike]="Удалить HexStrike AI"
+    [docker]="Удалить Docker"
+    [deepseek]="Удалить DeepSeek Harness (dsh)"
+    [graphify]="Удалить Graphify (CLI)"
+    [time]="Вернуть часовой пояс, синхронизацию и формат часов"
+    [keyboard]="Вернуть прежние раскладки клавиатуры"
+    [nolock]="Вернуть блокировку экрана по времени"
+)
 
-do_discord() {
-    step "4. Discord (официальный .deb)"
-    local deb="${DOWNLOAD_DIR}/discord.deb"
-    if curl -fL --retry 3 -o "$deb" "https://discord.com/api/download?platform=linux&format=deb"; then
-        install_deb "$deb" && ok "Discord установлен"
-    else
-        warn "Не скачался Discord .deb"
-    fi
-}
-
-do_obsidian() {
-    step "5. Obsidian (последний .deb с GitHub)"
-    local deb="${DOWNLOAD_DIR}/obsidian.deb"
-    if gh_latest_asset "obsidianmd/obsidian-releases" 'amd64\.deb$' "$deb"; then
-        install_deb "$deb" && ok "Obsidian установлен"
-    else
-        warn "Не удалось получить Obsidian .deb"
-    fi
-}
-
-do_happ() {
-    step "6. Happ (последний .deb с GitHub)"
-    local deb="${DOWNLOAD_DIR}/happ.deb"
-    # Берём x64 .deb из релизов happ-desktop
-    if gh_latest_asset "Happ-proxy/happ-desktop" 'linux.*(x64|amd64).*\.deb$|\.deb$' "$deb"; then
-        install_deb "$deb" && ok "Happ установлен"
-    else
-        warn "Не удалось получить Happ .deb — проверь https://www.happ.su вручную"
-    fi
-}
-
-do_amnezia() {
-    step "7. AmneziaVPN (автоматическая установка)"
-    # GUI-зависимости для Debian 13/Kali.
-    sudo apt install -y libxcb-xinerama0 libxcb-cursor0 iptables 2>/dev/null || true
-    # КЛЮЧЕВОЙ момент: без systemd-resolved AmneziaWG/WireGuard подключается,
-    # но DNS внутри туннеля не работает ("Подключено", а сайты не грузятся).
-    # Ставим и включаем его заранее — иначе VPN будет бесполезен.
-    sudo apt install -y systemd-resolved 2>/dev/null || true
-    sudo systemctl enable --now systemd-resolved 2>/dev/null || true
-
-    # Уже установлен? — пропускаем (идемпотентность).
-    if [[ -x /opt/AmneziaVPN/bin/AmneziaVPN ]]; then
-        ok "AmneziaVPN уже установлен (/opt/AmneziaVPN). Пропускаю установку."
-        return
-    fi
-
-    local dest="${HOME}/amneziavpn-installer"
-    mkdir -p "$dest"
-    local run="${dest}/AmneziaVPN_linux_x64.run"
-    if ! gh_latest_asset "amnezia-vpn/amnezia-client" 'linux_x64\.run$' "$run"; then
-        warn "Не удалось скачать AmneziaVPN. Скачай вручную: https://github.com/amnezia-vpn/amnezia-client/releases/latest"
-        return
-    fi
-    chmod +x "$run"
-    # Полностью тихая (headless) установка через Qt Installer Framework.
-    # Ставит в /opt/AmneziaVPN, создаёт и включает systemd-сервис AmneziaVPN.service.
-    log "Ставлю AmneziaVPN в автоматическом режиме..."
-    if sudo "$run" install --accept-licenses --accept-messages --default-answer --confirm-command -t /opt/AmneziaVPN; then
-        ok "AmneziaVPN установлен. Запуск: AmneziaVPN (или из меню приложений)"
-    else
-        warn "Авто-установка не удалась — запусти установщик вручную из графической сессии: $run"
-    fi
-}
-
-do_hexstrike() {
-    step "8. HexStrike AI (MCP-сервер)"
-    # Вариант А — пакет Kali (самый простой):
-    if sudo apt install -y hexstrike-ai 2>/dev/null && pkg_installed hexstrike-ai; then
-        ok "HexStrike установлен из репозитория Kali (hexstrike-ai)"
-        return
-    fi
-    # Вариант Б — из исходников (официальный репозиторий 0x4m4/hexstrike-ai):
-    warn "Пакет Kali не поставился, ставлю из git..."
-    mkdir -p "$(dirname "$HEXSTRIKE_DIR")"
-    if [[ -d "$HEXSTRIKE_DIR/.git" ]]; then
-        git -C "$HEXSTRIKE_DIR" pull --ff-only
-    else
-        git clone https://github.com/0x4m4/hexstrike-ai.git "$HEXSTRIKE_DIR"
-    fi
-    python3 -m venv "$HEXSTRIKE_DIR/venv"
-    "$HEXSTRIKE_DIR/venv/bin/pip" install --upgrade pip
-    "$HEXSTRIKE_DIR/venv/bin/pip" install -r "$HEXSTRIKE_DIR/requirements.txt"
-    ok "HexStrike установлен в $HEXSTRIKE_DIR"
-    cat <<EOF | tee -a "$LOG_FILE"
-  Запуск сервера:  ${HEXSTRIKE_DIR}/venv/bin/python ${HEXSTRIKE_DIR}/hexstrike_server.py
-  Подключение MCP к Claude: добавь в конфиг mcpServers запись, которая запускает
-  hexstrike_mcp.py с аргументом --server http://localhost:8888
-EOF
-}
-
-do_deepseek() {
-    step "9. DeepSeek Harness (dsh) — кодинг-агент от DeepSeek"
-    # DeepSeek Harness ставится через npm как пакет @deepseek-ai/dsh.
-    # Нужен Node.js >= 22.19 (рекомендуется Node 24). Если Node нет или он старый —
-    # ставим Node 24 из официального репозитория NodeSource.
-    local need_node=1
-    if have node; then
-        local major
-        major=$(node -v | sed 's/^v//' | cut -d. -f1)
-        if [[ "$major" -ge 22 ]]; then need_node=0; fi
-    fi
-    if [[ "$need_node" -eq 1 ]]; then
-        log "Ставлю Node.js 24 из NodeSource..."
-        curl -fsSL https://deb.nodesource.com/setup_24.x | sudo -E bash -
-        sudo apt install -y nodejs
-    fi
-    if ! have npm; then
-        err "npm не найден — не могу поставить dsh. Проверь установку Node.js."
-        return 1
-    fi
-    log "Ставлю DeepSeek Harness (@deepseek-ai/dsh) глобально через npm..."
-    if sudo npm install -g @deepseek-ai/dsh; then
-        ok "DeepSeek Harness установлен."
-        log "  Запуск НЕ командой 'dsh', а с указанием профиля:"
-        log "    dsh tui                      — терминальный интерфейс"
-        log "    dsh web                      — веб-интерфейс (http://127.0.0.1:3080)"
-        log "    dsh headless \"задача\"         — разовая задача без интерфейса"
-        warn "При первом запуске нужен API-ключ DeepSeek (platform.deepseek.com) и выбор рабочей папки."
-    else
-        warn "Не удалось поставить @deepseek-ai/dsh. Проверь имя пакета в офиц. репозитории DeepSeek Harness."
-    fi
-}
-
-# ============================================================================
-# Запуск: все шаги или только выбранные аргументами
-# ============================================================================
-ALL_STEPS=(system base claude discord obsidian happ amnezia hexstrike deepseek)
-
+# ----------------------------------------------------------------------------
+# Диспетчер установки одного шага по ключу
+# ----------------------------------------------------------------------------
 run_step() {
     case "$1" in
-        system)   do_system ;;
-        base)     do_base ;;
-        claude)   do_claude ;;
-        discord)  do_discord ;;
-        obsidian) do_obsidian ;;
-        happ)     do_happ ;;
-        amnezia)  do_amnezia ;;
+        system)    do_system ;;
+        base)      do_base ;;
+        claude)    do_claude ;;
+        discord)   do_discord ;;
+        telegram)  do_telegram ;;
+        obsidian)  do_obsidian ;;
+        happ)      do_happ ;;
+        amnezia)   do_amnezia ;;
         hexstrike) do_hexstrike ;;
-        deepseek) do_deepseek ;;
-        *) err "Неизвестный шаг: $1 (доступно: ${ALL_STEPS[*]})"; return 1 ;;
+        docker)    do_docker ;;
+        deepseek)  do_deepseek ;;
+        graphify)  do_graphify ;;
+        time)      do_set_time ;;
+        keyboard)  do_set_keyboard ;;
+        nolock)    do_set_nolock ;;
+        *) err "Неизвестный шаг: $1"; return 1 ;;
     esac
 }
 
-main() {
-    local steps=("$@")
-    [[ ${#steps[@]} -eq 0 ]] && steps=("${ALL_STEPS[@]}")
-    for s in "${steps[@]}"; do
-        run_step "$s" || warn "Шаг '$s' завершился с ошибкой — продолжаю дальше."
+# ----------------------------------------------------------------------------
+# Интерактивный мастер (whiptail)
+# ----------------------------------------------------------------------------
+# Чек-лист: <title> <prompt> <массив-ключей> <assoc-описаний> <массив-результата> [ON|OFF]
+# Результат — в выходном массиве в КАНОНИЧНОМ порядке ключей.
+wt_checklist() {
+    local title="$1" prompt="$2"
+    local -n _steps="$3"; local -n _desc="$4"; local -n _out="$5"
+    local default="${6:-ON}"
+    local args=() k t sel chosen=() on
+    for k in "${_steps[@]}"; do
+        on="$default"
+        [[ " ${DEFAULT_OFF[*]} " == *" $k "* ]] && on=OFF
+        args+=("$k" "${_desc[$k]}" "$on")
     done
+    sel=$(whiptail --title "$title" --checklist "$prompt" \
+        20 78 "${#_steps[@]}" "${args[@]}" 3>&1 1>&2 2>&3) || { _out=(); return 1; }
+    eval "chosen=($sel)"
+    _out=()
+    for k in "${_steps[@]}"; do
+        for t in "${chosen[@]}"; do [[ "$t" == "$k" ]] && { _out+=("$k"); break; }; done
+    done
+    return 0
+}
+
+# Порядок выполнения выбранных категорий (результат -> CAT_ORDER)
+order_categories() {
+    CAT_ORDER=()
+    local remaining=("${CAT_CHOSEN[@]}")
+    if [[ ${#remaining[@]} -le 1 ]]; then CAT_ORDER=("${remaining[@]}"); return; fi
+    while [[ ${#remaining[@]} -gt 1 ]]; do
+        local args=() k first=1 pick new=()
+        for k in "${remaining[@]}"; do
+            if [[ $first -eq 1 ]]; then args+=("$k" "${CAT_DESC[$k]}" "ON"); first=0
+            else args+=("$k" "${CAT_DESC[$k]}" "OFF"); fi
+        done
+        pick=$(whiptail --title "Порядок выполнения" \
+            --radiolist "Что выполнить следующим? (осталось пунктов: ${#remaining[@]})" \
+            16 78 "${#remaining[@]}" "${args[@]}" 3>&1 1>&2 2>&3) || { CAT_ORDER=("${CAT_CHOSEN[@]}"); return; }
+        [[ -z "$pick" ]] && pick="${remaining[0]}"
+        CAT_ORDER+=("$pick")
+        for k in "${remaining[@]}"; do [[ "$k" != "$pick" ]] && new+=("$k"); done
+        remaining=("${new[@]}")
+    done
+    CAT_ORDER+=("${remaining[0]}")
+}
+
+# Экран подтверждения со сводкой. Возврат 0 = согласие.
+confirm_summary() {
+    local msg="Будет выполнено в таком порядке:\n\n" n=1 c a
+    for c in "${CAT_ORDER[@]}"; do
+        msg+="$n) ${CAT_DESC[$c]}\n"; ((n++))
+        case "$c" in
+            apps)
+                if [[ ${#APP_CHOSEN[@]} -gt 0 ]]; then
+                    for a in "${APP_CHOSEN[@]}"; do msg+="      - ${APP_DESC[$a]}\n"; done
+                else msg+="      (приложения не выбраны)\n"; fi ;;
+            ai)
+                if [[ ${#AI_CHOSEN[@]} -gt 0 ]]; then
+                    for a in "${AI_CHOSEN[@]}"; do msg+="      - ${AI_DESC[$a]}\n"; done
+                else msg+="      (AI не выбран)\n"; fi ;;
+            settings)
+                if [[ ${#SETTINGS_CHOSEN[@]} -gt 0 ]]; then
+                    for a in "${SETTINGS_CHOSEN[@]}"; do msg+="      - ${SETTINGS_DESC[$a]}\n"; done
+                else msg+="      (пункты настройки не выбраны)\n"; fi ;;
+            custom)
+                if [[ ${#CUSTOM_CHOSEN[@]} -gt 0 ]]; then
+                    for a in "${CUSTOM_CHOSEN[@]}"; do msg+="      - ${CUSTOM_DESC[$a]}\n"; done
+                else msg+="      (пока пусто)\n"; fi ;;
+            revert)
+                if [[ ${#REVERT_CHOSEN[@]} -gt 0 ]]; then
+                    for a in "${REVERT_CHOSEN[@]}"; do msg+="      - ${REVERT_DESC[$a]}\n"; done
+                else msg+="      (пункты отката не выбраны)\n"; fi ;;
+        esac
+    done
+    msg+="\nНачать выполнение?"
+    whiptail --title "Подтверждение" --yesno "$msg" 24 78
+}
+
+CAT_CHOSEN=(); CAT_ORDER=(); APP_CHOSEN=(); AI_CHOSEN=(); SETTINGS_CHOSEN=(); CUSTOM_CHOSEN=(); REVERT_CHOSEN=()
+run_wizard() {
+    if ! have whiptail; then
+        warn "whiptail не найден — ставлю всё по умолчанию (без меню)."
+        do_system; do_base
+        local a; for a in "${APP_STEPS[@]}" "${AI_STEPS[@]}"; do run_step "$a" || warn "Шаг '$a' с ошибкой."; done
+        return
+    fi
+    # 1) категории
+    wt_checklist "Что будем делать?" "Выбери этапы (Пробел — вкл/выкл, Enter — ок):" \
+        CATEGORIES CAT_DESC CAT_CHOSEN || { warn "Отменено."; exit 0; }
+    [[ ${#CAT_CHOSEN[@]} -eq 0 ]] && { warn "Ничего не выбрано — выходим."; exit 0; }
+    # 2) порядок
+    order_categories
+    # 3) под-списки
+    local c
+    for c in "${CAT_ORDER[@]}"; do
+        case "$c" in
+            apps)   wt_checklist "Установка приложений" "Какие приложения поставить?" \
+                        APP_STEPS APP_DESC APP_CHOSEN ;;
+            ai)     wt_checklist "AI: модели и инструменты" "Что поставить?" \
+                        AI_STEPS AI_DESC AI_CHOSEN ;;
+            settings) wt_checklist "Настройка системы" "Что настроить?" \
+                        SETTINGS_STEPS SETTINGS_DESC SETTINGS_CHOSEN ;;
+            custom)
+                if [[ ${#CUSTOM_STEPS[@]} -eq 0 ]]; then
+                    whiptail --title "Кастомизация" --msgbox "Пока пусто — пункты добавим позже." 8 60
+                else
+                    wt_checklist "Кастомизация" "Что настроить?" \
+                        CUSTOM_STEPS CUSTOM_DESC CUSTOM_CHOSEN
+                fi ;;
+            revert) wt_checklist "Откат" "Что откатить/удалить? (по умолчанию ничего не отмечено)" \
+                        REVERT_STEPS REVERT_DESC REVERT_CHOSEN OFF ;;
+        esac
+    done
+    # 4) подтверждение
+    confirm_summary || { warn "Отменено на экране подтверждения."; exit 0; }
+    # 5) выполнение
+    log "План: ${CAT_ORDER[*]}"
+    local a
+    for c in "${CAT_ORDER[@]}"; do
+        case "$c" in
+            update) do_system ;;
+            apps)   do_base   # базовые инструменты — зависимость приложений
+                    for a in "${APP_CHOSEN[@]}"; do run_step "$a" || warn "Шаг '$a' с ошибкой."; done ;;
+            ai)     do_base   # python3/pipx/curl нужны для AI-инструментов
+                    for a in "${AI_CHOSEN[@]}"; do run_step "$a" || warn "Шаг '$a' с ошибкой."; done ;;
+            settings) for a in "${SETTINGS_CHOSEN[@]}"; do run_step "$a" || warn "Шаг '$a' с ошибкой."; done ;;
+            custom) for a in "${CUSTOM_CHOSEN[@]}"; do run_step "$a" || warn "Шаг '$a' с ошибкой."; done ;;
+            revert) for a in "${REVERT_CHOSEN[@]}"; do run_undo "$a" || warn "Откат '$a' с ошибкой."; done ;;
+        esac
+    done
+}
+
+main() {
+    setup_prepare
+    if [[ $# -gt 0 && ( "$1" == "undo" || "$1" == "revert" || "$1" == "--undo" ) ]]; then
+        # Явный откат: ./setup.sh undo amnezia prompt ...
+        shift
+        [[ $# -eq 0 ]] && { warn "Укажи, что откатывать: ${REVERT_STEPS[*]}"; exit 0; }
+        local s; for s in "$@"; do run_undo "$s" || warn "Откат '$s' с ошибкой — продолжаю."; done
+    elif [[ $# -gt 0 ]]; then
+        # Явная установка: ./setup.sh claude amnezia ...
+        local s; for s in "$@"; do run_step "$s" || warn "Шаг '$s' с ошибкой — продолжаю."; done
+    elif [[ -t 0 ]]; then
+        run_wizard
+    else
+        # Неинтерактивно — всё по умолчанию
+        do_system; do_base
+        local a; for a in "${APP_STEPS[@]}" "${AI_STEPS[@]}"; do run_step "$a" || warn "Шаг '$a' с ошибкой."; done
+    fi
     step "Готово"
     ok "Все выбранные шаги выполнены. Полный лог: $LOG_FILE"
 }
