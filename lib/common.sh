@@ -19,7 +19,14 @@ log()  { echo "${BLUE}[*]${RESET} $*" | tee -a "$LOG_FILE"; }
 ok()   { echo "${GREEN}[+]${RESET} $*" | tee -a "$LOG_FILE"; }
 warn() { echo "${YELLOW}[!]${RESET} $*" | tee -a "$LOG_FILE"; }
 err()  { echo "${RED}[x]${RESET} $*" | tee -a "$LOG_FILE"; }
-step() { echo; echo "${BOLD}${BLUE}==== $* ====${RESET}" | tee -a "$LOG_FILE"; }
+step() {
+    echo; echo "==== $* ====" >> "$LOG_FILE"
+    if have gum && [[ -t 1 ]]; then
+        gum style --margin "0 0" --padding "0 1" --bold --foreground "#FFFFFF" --background "#367BF0" " $* "
+    else
+        echo "${BOLD}${BLUE}==== $* ====${RESET}"
+    fi
+}
 
 # ----------------------------------------------------------------------------
 # Помощники

@@ -22,6 +22,8 @@ cd kali-new
 | `./setup.sh undo telegram time` | Откатить указанные шаги |
 | `TZ_ZONE=Europe/Moscow ./setup.sh time` | Задать часовой пояс без меню |
 
+Меню рисуется через [gum](https://github.com/charmbracelet/gum): он ставится из репозитория Kali при первом запуске мастера. Если gum поставить не удалось, будет обычное окно whiptail.
+
 Лог работы пишется в `~/kali-setup.log`.
 
 ## Что умеет
@@ -58,7 +60,33 @@ cd kali-new
 `keyboard`, `nolock` и секунды в часах рассчитаны на XFCE.
 
 ### Кастомизация
-Пока пусто — пункты будут добавлены позже.
+Сначала выбираешь окружение, потом его подпункты.
+
+**GNOME**
+| Ключ | Что делает |
+|---|---|
+| `gnome` | Окружение GNOME (`kali-desktop-gnome`) рядом с XFCE. Экран входа остаётся LightDM — сессию выбираешь при входе |
+| `gnomeext` | Расширения: Dash to Dock, AppIndicator, Blur my Shell, User Themes, Just Perfection, Caffeine, System Monitor, Freon + Extension Manager. Включаются автоматически |
+
+**Hyprland**
+| Ключ | Что делает |
+|---|---|
+| `hyprland` | Hyprland в стиле [JaKooLit](https://github.com/JaKooLit/Hyprland-Dots): тайлинг, Waybar, Rofi, swaync, hyprlock, Quickshell — пакеты из репозитория Kali, `awww` и `wallust` собираются через cargo, конфиги — из JaKooLit/Hyprland-Dots |
+
+- Нужна видеокарта с ускорением. В VMware: *Settings → Display → Accelerate 3D graphics*.
+- Текущие `~/.config/{hypr,waybar,rofi,kitty,…}` сохраняются; `./setup.sh undo hyprland` возвращает их.
+- Клавиши: **SUPER+H** — шпаргалка, **SUPER+Enter** — терминал, **SUPER+D** — меню, **SUPER+Q** — закрыть окно, **SUPER+1…0** — рабочие столы, **Alt+Shift** — раскладка.
+
+**XFCE** — украсить текущее окружение
+| Ключ | Что делает |
+|---|---|
+| `xtheme` | Тема GTK + рамки окон в палитре, папки Papirus под цвет, курсор Bibata, шрифты Inter + JetBrainsMono Nerd |
+| `xpanel` | Верхняя панель 36 px, полупрозрачная, часы по центру, без значка уведомлений |
+| `xpicom` | Picom: скруглённые углы, тени, размытие, плавное появление окон (без 3D — лёгкий режим без размытия) |
+| `xextras` | Rofi по **SUPER+D**; Conky-виджет на Lua/Cairo — часы, кольца CPU/RAM/диск, сеть с графиками, VPN (`tun0`/`amn0`/`wg0`), внешний IP и **заметки** из `~/notes.txt` (правка — **Win+N**; `# ` — заголовок, `x ` — сделано); обои в цветах палитры |
+
+Палитры: **Catppuccin Mocha**, **Nordic**, **Orchis**, **Dracula** — спрашиваются один раз при установке.
+Без меню: `PALETTE=nordic ./setup.sh xtheme xextras`.
 
 ## Откат
 
@@ -70,13 +98,15 @@ cd kali-new
 
 ```
 setup.sh              — точка входа: меню, списки шагов, диспетчер
+assets/conky/         — Lua-виджет Conky (копируется шагом xextras)
+lib/ui.sh             — меню мастера (gum, запасной вариант — whiptail)
 lib/common.sh         — общие помощники: вывод/лог, установка, состояние для отката, xfconf
 modules/
   system.sh           — обновление системы, базовые пакеты
   apps.sh             — приложения
   ai.sh               — AI-инструменты
   settings.sh         — настройка системы
-  custom.sh           — кастомизация (заглушка)
+  custom.sh           — кастомизация: GNOME, Hyprland, XFCE
   uninstall.sh        — откат всех шагов
 ```
 

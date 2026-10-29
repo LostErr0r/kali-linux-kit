@@ -1,25 +1,23 @@
 #!/usr/bin/env bash
 # modules/settings.sh — настройка системы (время, клавиатура, блокировка экрана).
 
-# Выбор часового пояса: регион -> город (whiptail). Результат — в stdout.
+# Выбор часового пояса: регион -> город (меню с поиском, lib/ui.sh). Результат — в stdout.
 # Без меню берётся переменная TZ_ZONE, например: TZ_ZONE=Europe/Moscow ./setup.sh time
 pick_timezone() {
     if [[ -n "${TZ_ZONE:-}" ]]; then echo "$TZ_ZONE"; return 0; fi
-    have whiptail && [[ -t 0 ]] || return 1
+    [[ -t 0 ]] && { ui_gum || have whiptail; } || return 1
     local all regions=() r args=() z zones=() region city
     all="$(timedatectl list-timezones 2>/dev/null)" || return 1
     # только основные регионы, без устаревших псевдонимов (GB, US, Zulu…)
     while read -r r; do regions+=("$r"); done < <(cut -d/ -f1 <<<"$all" | sort -u \
         | grep -xE 'Africa|America|Antarctica|Arctic|Asia|Atlantic|Australia|Europe|Indian|Pacific|UTC')
     for r in "${regions[@]}"; do args+=("$r" ""); done
-    region=$(whiptail --title "Часовой пояс" --menu "Выбери регион:" \
-        22 78 14 "${args[@]}" 3>&1 1>&2 2>&3) || return 1
+    region=$(ui_menu "Часовой пояс" "Выбери регион" "${args[@]}") || return 1
     while read -r z; do zones+=("$z"); done < <(grep -E "^${region}(/|$)" <<<"$all")
     [[ ${#zones[@]} -eq 1 ]] && { echo "${zones[0]}"; return 0; }
     args=()
     for z in "${zones[@]}"; do args+=("${z#"${region}"/}" "$(TZ="$z" date '+%H:%M  (UTC%:z)')"); done
-    city=$(whiptail --title "Часовой пояс: ${region}" --menu "Выбери город:" \
-        22 78 14 "${args[@]}" 3>&1 1>&2 2>&3) || return 1
+    city=$(ui_menu "Часовой пояс: ${region}" "Выбери город" "${args[@]}") || return 1
     echo "${region}/${city}"
 }
 
