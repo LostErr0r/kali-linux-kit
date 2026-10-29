@@ -41,6 +41,19 @@ do_keepassxc() {
     fi
 }
 
+do_torbrowser() {
+    step "Tor Browser (torbrowser-launcher из репозитория Kali)"
+    if pkg_installed torbrowser-launcher; then
+        ok "torbrowser-launcher уже установлен. Пропускаю."
+        return
+    fi
+    if sudo apt install -y torbrowser-launcher; then
+        ok "torbrowser-launcher установлен. Первый запуск (torbrowser-launcher, не от root) скачает и проверит Tor Browser."
+    else
+        warn "Не удалось поставить torbrowser-launcher"
+    fi
+}
+
 do_obsidian() {
     step "5. Obsidian (последний .deb с GitHub)"
     if pkg_installed obsidian; then

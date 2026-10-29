@@ -45,11 +45,12 @@ declare -A CAT_DESC=(
 )
 
 # base ставится автоматически как зависимость перед приложениями
-APP_STEPS=(discord telegram keepassxc obsidian happ amnezia docker)
+APP_STEPS=(discord telegram keepassxc torbrowser obsidian happ amnezia docker)
 declare -A APP_DESC=(
     [discord]="Discord"
     [telegram]="Telegram"
     [keepassxc]="KeePassXC (менеджер паролей)"
+    [torbrowser]="Tor Browser"
     [obsidian]="Obsidian"
     [happ]="Happ (прокси-клиент)"
     [amnezia]="AmneziaVPN"
@@ -80,12 +81,13 @@ declare -A CUSTOM_DESC=()
 DEFAULT_OFF=()
 
 # Что можно откатить (приложения + настройка системы; обновление системы откату не подлежит)
-REVERT_STEPS=(claude discord telegram keepassxc obsidian happ amnezia docker deepseek graphify hexstrike time keyboard nolock)
+REVERT_STEPS=(claude discord telegram keepassxc torbrowser obsidian happ amnezia docker deepseek graphify hexstrike time keyboard nolock)
 declare -A REVERT_DESC=(
     [claude]="Удалить Claude Desktop"
     [discord]="Удалить Discord"
     [telegram]="Удалить Telegram"
     [keepassxc]="Удалить KeePassXC"
+    [torbrowser]="Удалить Tor Browser"
     [obsidian]="Удалить Obsidian"
     [happ]="Удалить Happ"
     [amnezia]="Удалить AmneziaVPN"
@@ -109,6 +111,7 @@ run_step() {
         discord)   do_discord ;;
         telegram)  do_telegram ;;
         keepassxc) do_keepassxc ;;
+        torbrowser) do_torbrowser ;;
         obsidian)  do_obsidian ;;
         happ)      do_happ ;;
         amnezia)   do_amnezia ;;
