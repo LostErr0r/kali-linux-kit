@@ -16,6 +16,7 @@ undo_claude() {
 
 undo_discord()  { step "Откат: Discord";  apt_purge discord;  ok "Discord удалён."; }
 undo_telegram() { step "Откат: Telegram"; apt_purge telegram-desktop; ok "Telegram удалён."; }
+undo_keepassxc() { step "Откат: KeePassXC"; apt_purge keepassxc; ok "KeePassXC удалён."; }
 undo_obsidian() { step "Откат: Obsidian"; apt_purge obsidian; ok "Obsidian удалён."; }
 undo_happ()     { step "Откат: Happ";     apt_purge happ;     ok "Happ удалён."; }
 
@@ -110,6 +111,7 @@ run_undo() {
         claude)    undo_claude ;;
         discord)   undo_discord ;;
         telegram)  undo_telegram ;;
+        keepassxc) undo_keepassxc ;;
         obsidian)  undo_obsidian ;;
         happ)      undo_happ ;;
         amnezia)   undo_amnezia ;;

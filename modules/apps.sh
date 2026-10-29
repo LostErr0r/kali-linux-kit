@@ -28,6 +28,19 @@ do_telegram() {
     fi
 }
 
+do_keepassxc() {
+    step "KeePassXC (менеджер паролей из репозитория Kali)"
+    if pkg_installed keepassxc; then
+        ok "KeePassXC уже установлен (v$(dpkg-query -W -f='${Version}' keepassxc 2>/dev/null)). Пропускаю."
+        return
+    fi
+    if sudo apt install -y keepassxc; then
+        ok "KeePassXC установлен"
+    else
+        warn "Не удалось поставить keepassxc"
+    fi
+}
+
 do_obsidian() {
     step "5. Obsidian (последний .deb с GitHub)"
     if pkg_installed obsidian; then
