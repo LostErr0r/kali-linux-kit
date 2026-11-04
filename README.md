@@ -3,7 +3,7 @@
 **Русский** · [English](#english)
 
 Скрипт для быстрой настройки свежей Kali Linux (в т.ч. на флэшке): обновление системы,
-установка приложений, AI-инструментов, форензики и инструментов пентеста AD, настройка системы. У каждого шага есть откат.
+установка приложений, AI-инструментов, форензики, инструментов пентеста AD и веб-пентеста, настройка системы. У каждого шага есть откат.
 
 ## Быстрый старт
 
@@ -61,10 +61,12 @@ cd kali-new
 |---|---|
 | `hayabusa` | Hayabusa — таймлайн и детекты по правилам Sigma (релиз с GitHub в `/opt/hayabusa`, команда `hayabusa`) |
 | `takajo` | Takajo — HTML-отчёты и сводки по результатам Hayabusa (релиз с GitHub в `/opt/takajo`, команда `takajo`) |
+| `volatility` | Volatility 3 — анализ дампов оперативной памяти (через `pipx`, команда `vol`) |
 
 ```bash
 hayabusa json-timeline -d ./logs -L -o timeline.jsonl
 takajo html-report -t timeline.jsonl -o report
+vol -f memory.raw windows.pslist
 ```
 
 ### Пентест AD
@@ -76,6 +78,15 @@ takajo html-report -t timeline.jsonl -o report
 | `certipy` | Certipy (`certipy-ad`) — поиск и эксплуатация уязвимостей AD CS |
 | `responder` | Responder — перехват LLMNR/NBT-NS/mDNS, сбор NTLM-хэшей |
 | `bloodhound` | BloodHound CE + сборщик `bloodhound-ce-python`. Первый запуск: `sudo bloodhound-setup`, потом `bloodhound` |
+
+### Веб-пентест
+Всё ставится из репозитория Kali, откат — как у пентеста AD.
+
+| Ключ | Что ставится |
+|---|---|
+| `seclists` | SecLists — словари для перебора в `/usr/share/seclists` (около 2 ГБ) |
+| `ffuf` | ffuf — быстрый фаззер директорий, параметров и vhost |
+| `gobuster` | gobuster — перебор директорий, DNS-поддоменов и vhost |
 
 ### Настройка системы
 | Ключ | Что делает |
@@ -133,8 +144,9 @@ modules/
   system.sh           — обновление системы, базовые пакеты
   apps.sh             — приложения
   ai.sh               — AI-инструменты
-  forensics.sh        — форензика: Hayabusa, Takajo
+  forensics.sh        — форензика: Hayabusa, Takajo, Volatility 3
   pentest.sh          — пентест AD: NetExec, Certipy, Responder, BloodHound
+  web.sh              — веб-пентест: SecLists, ffuf, gobuster
   settings.sh         — настройка системы
   custom.sh           — кастомизация: GNOME, Hyprland, XFCE
   uninstall.sh        — откат всех шагов
@@ -152,7 +164,7 @@ modules/
 [Русский](#kali-new) · **English**
 
 A script for quickly setting up a fresh Kali Linux install (including a live USB): system update,
-apps, AI tools, forensics and AD pentest tools, system tweaks. Every step can be rolled back.
+apps, AI tools, forensics, AD and web pentest tools, system tweaks. Every step can be rolled back.
 
 ### Quick start
 
@@ -212,10 +224,12 @@ Parsing Windows event logs (`.evtx`) collected from a machine. KAPE and Timeline
 |---|---|
 | `hayabusa` | Hayabusa — timeline and Sigma-rule detections (GitHub release in `/opt/hayabusa`, command `hayabusa`) |
 | `takajo` | Takajo — HTML reports and summaries from Hayabusa results (GitHub release in `/opt/takajo`, command `takajo`) |
+| `volatility` | Volatility 3 — memory dump analysis (via `pipx`, command `vol`) |
 
 ```bash
 hayabusa json-timeline -d ./logs -L -o timeline.jsonl
 takajo html-report -t timeline.jsonl -o report
+vol -f memory.raw windows.pslist
 ```
 
 #### AD pentest
@@ -227,6 +241,15 @@ Everything comes from the Kali repository. If a package was already installed be
 | `certipy` | Certipy (`certipy-ad`) — finding and exploiting AD CS weaknesses |
 | `responder` | Responder — LLMNR/NBT-NS/mDNS poisoning, NTLM hash capture |
 | `bloodhound` | BloodHound CE + the `bloodhound-ce-python` collector. First run: `sudo bloodhound-setup`, then `bloodhound` |
+
+#### Web pentest
+Everything comes from the Kali repository; rollback works like the AD pentest steps.
+
+| Key | What gets installed |
+|---|---|
+| `seclists` | SecLists — wordlists in `/usr/share/seclists` (about 2 GB) |
+| `ffuf` | ffuf — fast fuzzer for directories, parameters and vhosts |
+| `gobuster` | gobuster — directory, DNS subdomain and vhost brute forcing |
 
 #### System settings
 | Key | What it does |
@@ -284,8 +307,9 @@ modules/
   system.sh           — system update, base packages
   apps.sh             — apps
   ai.sh               — AI tools
-  forensics.sh        — forensics: Hayabusa, Takajo
+  forensics.sh        — forensics: Hayabusa, Takajo, Volatility 3
   pentest.sh          — AD pentest: NetExec, Certipy, Responder, BloodHound
+  web.sh              — web pentest: SecLists, ffuf, gobuster
   settings.sh         — system settings
   custom.sh           — customization: GNOME, Hyprland, XFCE
   uninstall.sh        — rollback for all steps

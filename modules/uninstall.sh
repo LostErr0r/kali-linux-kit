@@ -69,7 +69,7 @@ undo_amnezia() {
 }
 
 # ----------------------------------------------------------------------------
-# Откат форензики и пентеста AD
+# Откат форензики, пентеста AD и веб-пентеста
 # ----------------------------------------------------------------------------
 undo_hayabusa() {
     step "Откат: Hayabusa"
@@ -83,9 +83,23 @@ undo_takajo() {
     ok "Takajo удалён."
 }
 
+undo_volatility() {
+    step "Откат: Volatility 3"
+    if [[ "$(state_get volatility.installed)" == yes ]]; then
+        pipx uninstall volatility3 2>/dev/null || true
+        ok "Volatility 3 удалён."
+    else
+        warn "Volatility 3 ставил не скрипт (или шаг не запускался) — не удаляю."
+    fi
+    state_del volatility.installed
+}
+
 undo_netexec()    { pentest_undo_apt netexec "NetExec"; }
 undo_certipy()    { pentest_undo_apt certipy "Certipy"; }
 undo_responder()  { pentest_undo_apt responder "Responder"; }
+undo_seclists()   { pentest_undo_apt seclists "SecLists"; }
+undo_ffuf()       { pentest_undo_apt ffuf "ffuf"; }
+undo_gobuster()   { pentest_undo_apt gobuster "gobuster"; }
 undo_bloodhound() {
     pentest_undo_apt bloodhound "BloodHound"
     log "neo4j и postgresql удаляются вместе с пакетом, только если их больше ничего не использует (apt autoremove)."
@@ -302,10 +316,14 @@ run_undo() {
         graphify)  undo_graphify ;;
         hayabusa)  undo_hayabusa ;;
         takajo)    undo_takajo ;;
+        volatility) undo_volatility ;;
         netexec)   undo_netexec ;;
         certipy)   undo_certipy ;;
         responder) undo_responder ;;
         bloodhound) undo_bloodhound ;;
+        seclists)  undo_seclists ;;
+        ffuf)      undo_ffuf ;;
+        gobuster)  undo_gobuster ;;
         time)      undo_time ;;
         keyboard)  undo_keyboard ;;
         nolock)    undo_nolock ;;

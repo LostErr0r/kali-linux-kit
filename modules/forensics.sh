@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# modules/forensics.sh — форензика: разбор журналов Windows (Hayabusa) и отчёты по таймлайну (Takajo).
+# modules/forensics.sh — форензика: журналы Windows (Hayabusa), отчёты по таймлайну (Takajo), память (Volatility 3).
 
 FORENSICS_DIR="/opt"   # инструменты ставятся в /opt/<имя>, команды — в /usr/local/bin
 
@@ -64,4 +64,23 @@ cd "${FORENSICS_DIR}/takajo" && exec ./takajo "\${args[@]}"
 EOF
     sudo chmod +x /usr/local/bin/takajo
     ok "Takajo установлен. Пример: takajo html-report -t timeline.jsonl -o report"
+}
+
+do_volatility() {
+    step "Volatility 3 (анализ дампов памяти, через pipx)"
+    # В репозитории Kali пакета нет. PyPI-пакет volatility3, команда — vol
+    if have vol; then
+        ok "Volatility 3 уже установлен ($(vol --version 2>/dev/null | head -n1)). Пропускаю."
+        return
+    fi
+    have pipx || sudo apt install -y pipx 2>/dev/null || true
+    pipx ensurepath >/dev/null 2>&1 || true
+    if pipx install volatility3; then
+        state_set_once volatility.installed yes
+        ok "Volatility 3 установлен (команда: vol). Пример: vol -f memory.raw windows.pslist"
+        log "Символы Windows Volatility скачает сам при первом анализе (нужен интернет)."
+    else
+        warn "Не удалось поставить volatility3 через pipx. Поставь вручную: pipx install volatility3"
+        return 1
+    fi
 }
