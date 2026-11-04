@@ -208,7 +208,7 @@ declare -A CUSTOM_HINT=(
     [xtheme]="палитра на выбор, иконки, курсор, шрифты"
     [xpanel]="36 px, полупрозрачная, часы по центру"
     [xpicom]="Picom: скругления, тени, размытие, анимации"
-    [xextras]="Rofi на SUPER+D, Conky с заметками, обои"
+    [xextras]="Rofi на SUPER+R, Conky (2 вида) с заметками, обои"
 )
 CUSTOM_STEPS=("${GNOME_STEPS[@]}" "${HYPR_STEPS[@]}" "${XFCE_STEPS[@]}")
 

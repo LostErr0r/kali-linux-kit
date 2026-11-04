@@ -132,10 +132,10 @@ vol -f memory.raw windows.pslist
 | `xtheme` | Тема GTK + рамки окон в палитре, папки Papirus под цвет, курсор Bibata, шрифты Inter + JetBrainsMono Nerd |
 | `xpanel` | Верхняя панель 36 px, полупрозрачная, часы по центру, без значка уведомлений |
 | `xpicom` | Picom: скруглённые углы, тени, размытие, плавное появление окон (без 3D — лёгкий режим без размытия) |
-| `xextras` | Rofi по **SUPER+D**; Conky-виджет на Lua/Cairo — часы, кольца CPU/RAM/диск, сеть с графиками, VPN (`tun0`/`amn0`/`wg0`), внешний IP и **заметки** из `~/notes.txt` (правка — **Win+N**; `# ` — заголовок, `x ` — сделано); обои в цветах палитры |
+| `xextras` | Rofi по **SUPER+R** (вместо «Выполнить»; **SUPER+D** по-прежнему скрывает все окна); Conky-виджет на выбор: **классический** (текст, полосы CPU/RAM/swap, сеть с градиентными графиками, VPN, диски, температура и батарея если есть, топ процессов) или **кольца** на Lua/Cairo (часы, кольца CPU/RAM/диск, сеть, VPN). В обоих — внешний IP и **заметки** из `~/notes.txt` (правка — **Win+N**; `# ` — заголовок, `x ` — сделано); обои в цветах палитры |
 
 Палитры: **Catppuccin Mocha**, **Nordic**, **Orchis**, **Dracula** — спрашиваются один раз при установке.
-Без меню: `PALETTE=nordic ./setup.sh xtheme xextras`.
+Без меню: `PALETTE=nordic CONKY=classic ./setup.sh xtheme xextras` (`CONKY=rings` — кольца).
 
 ## Откат
 
@@ -147,7 +147,7 @@ vol -f memory.raw windows.pslist
 
 ```
 setup.sh              — точка входа: меню, списки шагов, диспетчер
-assets/conky/         — Lua-виджет Conky (копируется шагом xextras)
+assets/conky/         — виджеты Conky: классический и кольца (копируются шагом xextras)
 lib/ui.sh             — меню мастера (gum, запасной вариант — whiptail)
 lib/common.sh         — общие помощники: вывод/лог, установка, состояние для отката, xfconf
 modules/
@@ -306,10 +306,10 @@ First pick a desktop environment, then its items.
 | `xtheme` | GTK theme + window borders in the palette, matching Papirus folders, Bibata cursor, Inter + JetBrainsMono Nerd fonts |
 | `xpanel` | 36 px semi-transparent top panel, centered clock, no notification icon |
 | `xpicom` | Picom: rounded corners, shadows, blur, smooth window fade-in (without 3D — a light mode with no blur) |
-| `xextras` | Rofi on **SUPER+D**; a Lua/Cairo Conky widget — clock, CPU/RAM/disk rings, network with graphs, VPN (`tun0`/`amn0`/`wg0`), external IP and **notes** from `~/notes.txt` (edit with **Win+N**; `# ` — heading, `x ` — done); wallpaper in the palette colors |
+| `xextras` | Rofi on **SUPER+R** (replaces the Run dialog; **SUPER+D** still shows the desktop); a Conky widget of your choice: **classic** (text, CPU/RAM/swap bars, network with gradient graphs, VPN, disks, temperature and battery when present, top processes) or **rings** in Lua/Cairo (clock, CPU/RAM/disk rings, network, VPN). Both show the external IP and **notes** from `~/notes.txt` (edit with **Win+N**; `# ` — heading, `x ` — done); wallpaper in the palette colors |
 
 Palettes: **Catppuccin Mocha**, **Nordic**, **Orchis**, **Dracula** — asked once during install.
-Without the menu: `PALETTE=nordic ./setup.sh xtheme xextras`.
+Without the menu: `PALETTE=nordic CONKY=classic ./setup.sh xtheme xextras` (`CONKY=rings` for the rings).
 
 ### Rollback
 
@@ -321,7 +321,7 @@ before. Everything can be rolled back except the system update.
 
 ```
 setup.sh              — entry point: menu, step lists, dispatcher
-assets/conky/         — Conky Lua widget (copied by the xextras step)
+assets/conky/         — Conky widgets: classic and rings (copied by the xextras step)
 lib/ui.sh             — wizard menu (gum, falls back to whiptail)
 lib/common.sh         — shared helpers: output/log, install, rollback state, xfconf
 modules/

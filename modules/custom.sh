@@ -231,6 +231,27 @@ xfce_palette() {
     log "Палитра: ${PAL_DESC[$XFCE_PALETTE]}"
 }
 
+# Стиль Conky-виджета (шаг xextras)
+CONKY_STYLES=(classic rings)
+declare -A CONKY_DESC=(
+    [classic]="Классический — текст, полосы, графики, топ процессов"
+    [rings]="Кольца — часы, кольца CPU/RAM/диск в цветах палитры"
+)
+
+# Стиль выбирается один раз за запуск. Без меню: CONKY=rings ./setup.sh xextras
+conky_style() {
+    local last style
+    last="$(cat "${STATE_DIR}/xfce.conky" 2>/dev/null)"
+    style="${CONKY:-}"
+    if [[ -z "$style" && -t 0 ]]; then
+        style=$(ui_radiolist "Виджет Conky" "Выбери вид виджета на рабочем столе" \
+            CONKY_STYLES CONKY_DESC "${last:-classic}") || style=""
+    fi
+    [[ -n "${CONKY_DESC[${style:-x}]:-}" ]] || style="${last:-classic}"
+    mkdir -p "$STATE_DIR"; echo "$style" > "${STATE_DIR}/xfce.conky"
+    echo "$style"
+}
+
 # Поставить пакеты, запомнив новые в state-ключ <key> (для отката)
 apt_install_tracked() {
     local key="$1" p new=(); shift
@@ -379,11 +400,12 @@ DESK
 }
 
 do_custom_xextras() {
-    step "XFCE: Rofi (SUPER+D), Conky, обои"
+    step "XFCE: Rofi (SUPER+R), Conky, обои"
     have_xfce || { warn "Не XFCE — пропускаю."; return 0; }
     xfce_palette
     local pal="$XFCE_PALETTE" bg="${PAL_BG[$XFCE_PALETTE]}" fg="${PAL_FG[$XFCE_PALETTE]}" acc="${PAL_ACC[$XFCE_PALETTE]}"
-    apt_install_tracked xextras.pkgs rofi conky-all imagemagick fonts-inter mousepad
+    local style; style="$(conky_style)"
+    apt_install_tracked xextras.pkgs rofi conky-all imagemagick fonts-inter fonts-jetbrains-mono mousepad
     # Rofi: своя тема в отдельном файле (конфиги Hyprland в ~/.config/rofi не трогаем)
     mkdir -p "$HOME/.local/share/rofi/themes"
     cat > "$HOME/.local/share/rofi/themes/kali-setup.rasi" <<RASI
@@ -397,14 +419,26 @@ element selected { background-color: @acc; text-color: @bg; }
 element-icon { size: 28px; }
 element-text { text-color: inherit; vertical-align: 0.5; }
 RASI
-    xfconf_set xfce4-keyboard-shortcuts "/commands/custom/<Super>d" string \
+    # SUPER+R вместо xfrun4; SUPER+D остаётся за xfwm4 — «скрыть все окна»
+    # (раньше Rofi висел на SUPER+D — снимаем, если это наша привязка)
+    xfconf_restore xfce4-keyboard-shortcuts "/commands/custom/<Super>d"
+    xfconf_set xfce4-keyboard-shortcuts "/commands/custom/<Super>r" string \
         "rofi -show drun -show-icons -theme kali-setup"
-    # Conky: виджет на Lua/Cairo (часы, кольца CPU/RAM/диск, сеть, VPN, заметки)
-    mkdir -p "$HOME/.config/conky" "$HOME/.config/autostart"
-    cp -f "${SCRIPT_DIR}/assets/conky/kali-setup.lua" "$HOME/.config/conky/kali-setup.lua"
-    printf "return { bg = '%s', fg = '%s', acc = '%s' }\n" "$bg" "$fg" "$acc" \
-        > "$HOME/.config/conky/kali-setup-colors.lua"
-    cat > "$HOME/.config/conky/kali-setup.conf" <<'CONKY'
+    # Conky: оба стиля ставятся как ~/.config/conky/kali-setup.conf, файлы другого стиля убираем
+    local cdir="$HOME/.config/conky"
+    mkdir -p "$cdir" "$HOME/.config/autostart"
+    if [[ "$style" == classic ]]; then
+        # текстовый: система, CPU/RAM, сеть с графиками, VPN, диски, топ процессов, заметки
+        rm -f "$cdir/kali-setup.lua" "$cdir/kali-setup-colors.lua"
+        cp -f "${SCRIPT_DIR}/assets/conky/kali-setup-classic.lua" "$cdir/kali-setup-classic.lua"
+        cp -f "${SCRIPT_DIR}/assets/conky/kali-setup-classic.conf" "$cdir/kali-setup.conf"
+    else
+        # кольца на Lua/Cairo (часы, кольца CPU/RAM/диск, сеть, VPN, заметки)
+        rm -f "$cdir/kali-setup-classic.lua"
+        cp -f "${SCRIPT_DIR}/assets/conky/kali-setup.lua" "$cdir/kali-setup.lua"
+        printf "return { bg = '%s', fg = '%s', acc = '%s' }\n" "$bg" "$fg" "$acc" \
+            > "$cdir/kali-setup-colors.lua"
+        cat > "$cdir/kali-setup.conf" <<'CONKY'
 conky.config = {
     alignment = 'top_right', gap_x = 30, gap_y = 60,
     own_window = true, own_window_type = 'desktop', own_window_transparent = true,
@@ -416,6 +450,7 @@ conky.config = {
 };
 conky.text = [[ ]];
 CONKY
+    fi
     # Заметки для виджета: ~/notes.txt (не перезаписываем), правка — SUPER+N
     if [[ ! -f "$HOME/notes.txt" ]]; then
         printf '%s\n' '# Сегодня' 'Win+N — открыть редактор заметок' 'Пиши сюда — виджет покажет сразу' 'x так помечается сделанное' > "$HOME/notes.txt"
@@ -451,6 +486,6 @@ DESK
             xfconf_set xfce4-desktop "$p" string "$wall"
         done
     fi
-    ok "Rofi — SUPER+D, Conky на рабочем столе, заметки — SUPER+N (~/notes.txt), обои: $wall"
+    ok "Rofi — SUPER+R (SUPER+D — скрыть все окна), Conky (${CONKY_DESC[$style]%% —*}) на рабочем столе, заметки — SUPER+N (~/notes.txt), обои: $wall"
 }
 

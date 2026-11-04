@@ -318,14 +318,16 @@ undo_xpicom() {
 undo_xextras() {
     step "Откат: XFCE — Rofi, Conky, обои"
     local p w
-    xfconf_restore xfce4-keyboard-shortcuts "/commands/custom/<Super>d"
+    xfconf_restore xfce4-keyboard-shortcuts "/commands/custom/<Super>d"   # старые версии вешали Rofi сюда
+    xfconf_restore xfce4-keyboard-shortcuts "/commands/custom/<Super>r"
     xfconf_restore xfce4-keyboard-shortcuts "/commands/custom/<Super>n"
     # ~/notes.txt — твои заметки, не удаляем
     state_del xextras.notes
     rm -f "$HOME/.local/share/rofi/themes/kali-setup.rasi"
     pkill -f 'conky.*kali-setup.conf' 2>/dev/null
     rm -f "$HOME/.config/autostart/kali-setup-conky.desktop" "$HOME/.config/conky/kali-setup.conf" \
-          "$HOME/.config/conky/kali-setup.lua" "$HOME/.config/conky/kali-setup-colors.lua"
+          "$HOME/.config/conky/kali-setup.lua" "$HOME/.config/conky/kali-setup-colors.lua" \
+          "$HOME/.config/conky/kali-setup-classic.lua"
     for p in $(xfconf-query -c xfce4-desktop -l 2>/dev/null | grep -E '/last-image$'); do
         xfconf_restore xfce4-desktop "$p"
     done
