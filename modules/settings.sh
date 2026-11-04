@@ -100,7 +100,10 @@ do_set_touchpad() {
     fi
     local pads d
     pads="$(xfce_touchpads)"
-    if [[ -z "$pads" ]]; then
+    if [[ -z "$pads" && -n "$(virt_type)" ]]; then
+        warn "Виртуальная машина ($(virt_type)) — тачпад настраивается на хосте, пропускаю."
+        return 0
+    elif [[ -z "$pads" ]]; then
         warn "Тачпад не найден (не ноутбук?) — пропускаю."
         return 0
     fi

@@ -106,6 +106,44 @@ undo_bloodhound() {
 }
 
 # ----------------------------------------------------------------------------
+# Откат сетевой настройки
+# ----------------------------------------------------------------------------
+undo_bbr() {
+    step "Откат: TCP BBR и буферы"
+    local kv k v
+    sudo rm -f "$NET_SYSCTL_FILE" "$NET_BBR_MODULE_FILE"
+    for kv in "${NET_SYSCTL[@]}"; do
+        k="${kv%%=*}"
+        state_has "net.sysctl.${k}" || continue
+        v="$(state_get "net.sysctl.${k}")"
+        [[ -n "$v" ]] && sudo sysctl -q -w "${k}=${v}" 2>/dev/null || true
+        state_del "net.sysctl.${k}"
+    done
+    ok "Параметры TCP возвращены как были."
+}
+
+undo_wifipower() {
+    step "Откат: энергосбережение Wi-Fi"
+    sudo rm -f "$NET_WIFI_FILE"
+    sudo systemctl reload NetworkManager 2>/dev/null || true
+    ok "Настройка убрана — энергосбережение вернётся при следующем подключении к Wi-Fi."
+}
+
+undo_dns() {
+    step "Откат: DNS"
+    sudo rm -f "$NET_DNS_FILE"
+    if [[ "$(state_get net.resolved.installed)" == yes && ! -d /opt/AmneziaVPN ]]; then
+        sudo systemctl disable --now systemd-resolved 2>/dev/null || true
+        apt_purge systemd-resolved
+        ok "DNS-настройка убрана, systemd-resolved (ставил скрипт) удалён."
+    else
+        sudo systemctl restart systemd-resolved 2>/dev/null || true
+        ok "DNS снова берётся из сети (DHCP)."
+    fi
+    state_del net.resolved.installed
+}
+
+# ----------------------------------------------------------------------------
 # Откат настройки системы
 # ----------------------------------------------------------------------------
 undo_time() {
@@ -324,6 +362,9 @@ run_undo() {
         seclists)  undo_seclists ;;
         ffuf)      undo_ffuf ;;
         gobuster)  undo_gobuster ;;
+        bbr)       undo_bbr ;;
+        wifipower) undo_wifipower ;;
+        dns)       undo_dns ;;
         time)      undo_time ;;
         keyboard)  undo_keyboard ;;
         nolock)    undo_nolock ;;

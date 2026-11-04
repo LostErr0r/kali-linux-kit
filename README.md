@@ -3,7 +3,7 @@
 **Русский** · [English](#english)
 
 Скрипт для быстрой настройки свежей Kali Linux (в т.ч. на флэшке): обновление системы,
-установка приложений, AI-инструментов, форензики, инструментов пентеста AD и веб-пентеста, настройка системы. У каждого шага есть откат.
+установка приложений, AI-инструментов, форензики, инструментов пентеста AD и веб-пентеста, настройка сети и системы. У каждого шага есть откат.
 
 ## Быстрый старт
 
@@ -23,10 +23,13 @@ cd kali-new
 | `./setup.sh telegram time` | Выполнить только указанные шаги, без меню |
 | `./setup.sh undo telegram time` | Откатить указанные шаги |
 | `TZ_ZONE=Europe/Moscow ./setup.sh time` | Задать часовой пояс без меню |
+| `DNS_PROVIDER=quad9 ./setup.sh dns` | Выбрать DNS без меню (`cloudflare`, `quad9`, `google`) |
 
 Меню рисуется через [gum](https://github.com/charmbracelet/gum): он ставится из репозитория Kali при первом запуске мастера. Если gum поставить не удалось, будет обычное окно whiptail.
 
 Лог работы пишется в `~/kali-setup.log`.
+
+Скрипт сам определяет, где запущена Kali: на компьютере, в виртуальной машине (VMware, VirtualBox, KVM) или с флэшки. В виртуалке шаги для тачпада и Wi-Fi пропускаются (это настраивается на хосте). На флэшке без persistence скрипт предупреждает, что всё сбросится после перезагрузки.
 
 ## Что умеет
 
@@ -88,6 +91,13 @@ vol -f memory.raw windows.pslist
 | `ffuf` | ffuf — быстрый фаззер директорий, параметров и vhost |
 | `gobuster` | gobuster — перебор директорий, DNS-поддоменов и vhost |
 
+### Сеть
+| Ключ | Что делает |
+|---|---|
+| `bbr` | TCP BBR + очередь fq, буферы TCP до 16 МБ, TCP Fast Open, MTU probing (`/etc/sysctl.d/90-kali-setup-net.conf`) |
+| `wifipower` | Выключает энергосбережение Wi-Fi в NetworkManager — пинг не скачет. В виртуалке без Wi-Fi-адаптера пропускается |
+| `dns` | Быстрый DNS на выбор (Cloudflare, Quad9, Google) через systemd-resolved: DNS-over-TLS (если сервер доступен по 853), кэш. DNS из DHCP тоже продолжает работать, так что внутренние домены на стендах резолвятся |
+
 ### Настройка системы
 | Ключ | Что делает |
 |---|---|
@@ -147,6 +157,7 @@ modules/
   forensics.sh        — форензика: Hayabusa, Takajo, Volatility 3
   pentest.sh          — пентест AD: NetExec, Certipy, Responder, BloodHound
   web.sh              — веб-пентест: SecLists, ffuf, gobuster
+  network.sh          — сеть: BBR, Wi-Fi, DNS
   settings.sh         — настройка системы
   custom.sh           — кастомизация: GNOME, Hyprland, XFCE
   uninstall.sh        — откат всех шагов
@@ -164,7 +175,7 @@ modules/
 [Русский](#kali-new) · **English**
 
 A script for quickly setting up a fresh Kali Linux install (including a live USB): system update,
-apps, AI tools, forensics, AD and web pentest tools, system tweaks. Every step can be rolled back.
+apps, AI tools, forensics, AD and web pentest tools, network and system tweaks. Every step can be rolled back.
 
 ### Quick start
 
@@ -184,10 +195,13 @@ cd kali-new
 | `./setup.sh telegram time` | Run only the listed steps, no menu |
 | `./setup.sh undo telegram time` | Roll back the listed steps |
 | `TZ_ZONE=Europe/Moscow ./setup.sh time` | Set the time zone without the menu |
+| `DNS_PROVIDER=quad9 ./setup.sh dns` | Pick the DNS provider without the menu (`cloudflare`, `quad9`, `google`) |
 
 The menu is drawn with [gum](https://github.com/charmbracelet/gum), which is installed from the Kali repository on the first run. If gum can't be installed, a plain whiptail dialog is used instead.
 
 The log is written to `~/kali-setup.log`.
+
+The script detects where Kali runs: installed on a PC, in a virtual machine (VMware, VirtualBox, KVM) or from a USB stick. In a VM the touchpad and Wi-Fi steps are skipped (the host handles those). On a USB stick without persistence the script warns that everything is lost on reboot.
 
 > The script's interface (menus, messages) is in Russian.
 
@@ -251,6 +265,13 @@ Everything comes from the Kali repository; rollback works like the AD pentest st
 | `ffuf` | ffuf — fast fuzzer for directories, parameters and vhosts |
 | `gobuster` | gobuster — directory, DNS subdomain and vhost brute forcing |
 
+#### Network
+| Key | What it does |
+|---|---|
+| `bbr` | TCP BBR + fq queue, TCP buffers up to 16 MB, TCP Fast Open, MTU probing (`/etc/sysctl.d/90-kali-setup-net.conf`) |
+| `wifipower` | Turns off Wi-Fi power saving in NetworkManager for a steady ping. Skipped in a VM without a Wi-Fi adapter |
+| `dns` | Fast DNS of your choice (Cloudflare, Quad9, Google) via systemd-resolved: DNS-over-TLS when port 853 is reachable, caching. DHCP-provided DNS keeps working, so internal lab domains still resolve |
+
 #### System settings
 | Key | What it does |
 |---|---|
@@ -310,6 +331,7 @@ modules/
   forensics.sh        — forensics: Hayabusa, Takajo, Volatility 3
   pentest.sh          — AD pentest: NetExec, Certipy, Responder, BloodHound
   web.sh              — web pentest: SecLists, ffuf, gobuster
+  network.sh          — network: BBR, Wi-Fi, DNS
   settings.sh         — system settings
   custom.sh           — customization: GNOME, Hyprland, XFCE
   uninstall.sh        — rollback for all steps

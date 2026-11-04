@@ -11,6 +11,7 @@
 #   modules/forensics.sh — форензика: Hayabusa, Takajo, Volatility 3
 #   modules/pentest.sh   — пентест AD: NetExec, Certipy, Responder, BloodHound
 #   modules/web.sh       — веб-пентест: SecLists, ffuf, gobuster
+#   modules/network.sh   — сеть: TCP BBR, Wi-Fi без энергосбережения, DNS
 #   modules/settings.sh  — настройка системы (время, клавиатура, блокировка экрана)
 #   modules/custom.sh    — кастомизация: GNOME, Hyprland, XFCE (подпункты)
 #   modules/uninstall.sh — откат (удалить/вернуть назад)
@@ -31,7 +32,7 @@ set -uo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/lib/common.sh"
 source "${SCRIPT_DIR}/lib/ui.sh"
-for _m in system apps ai forensics pentest web settings custom uninstall; do
+for _m in system apps ai forensics pentest web network settings custom uninstall; do
     source "${SCRIPT_DIR}/modules/${_m}.sh"
 done
 unset _m
@@ -40,7 +41,7 @@ unset _m
 # Данные для меню
 # ----------------------------------------------------------------------------
 # Меню: *_DESC — короткое название (оно же в сводке), *_HINT — пояснение серым рядом
-CATEGORIES=(update apps ai forensics pentest web settings custom revert)
+CATEGORIES=(update apps ai forensics pentest web network settings custom revert)
 declare -A CAT_DESC=(
     [update]="Обновление системы"
     [apps]="Приложения"
@@ -48,6 +49,7 @@ declare -A CAT_DESC=(
     [forensics]="Форензика"
     [pentest]="Пентест AD"
     [web]="Веб-пентест"
+    [network]="Сеть"
     [settings]="Настройка системы"
     [custom]="Кастомизация"
     [revert]="Откат"
@@ -60,6 +62,7 @@ declare -A CAT_HINT=(
     [forensics]="журналы Windows (Hayabusa, Takajo), память (Volatility)"
     [pentest]="NetExec, Certipy, Responder, BloodHound"
     [web]="словари SecLists, ffuf, gobuster"
+    [network]="BBR, Wi-Fi без энергосбережения, быстрый DNS"
     [settings]="часовой пояс, раскладка RU, блокировка экрана, тачпад"
     [custom]="внешний вид: GNOME, Hyprland или XFCE"
     [revert]="удалить поставленное, вернуть настройки"
@@ -147,6 +150,19 @@ declare -A WEB_HINT=(
     [gobuster]="перебор директорий, DNS-поддоменов, vhost"
 )
 
+# Сеть: скорость и задержки
+NETWORK_STEPS=(bbr wifipower dns)
+declare -A NETWORK_DESC=(
+    [bbr]="TCP BBR"
+    [wifipower]="Wi-Fi без энергосбережения"
+    [dns]="Быстрый DNS"
+)
+declare -A NETWORK_HINT=(
+    [bbr]="BBR + fq, буферы TCP до 16 МБ, TCP Fast Open"
+    [wifipower]="стабильный пинг, без засыпания адаптера"
+    [dns]="Cloudflare/Quad9/Google, DNS-over-TLS, кэш"
+)
+
 SETTINGS_STEPS=(time keyboard nolock touchpad)
 declare -A SETTINGS_DESC=(
     [time]="Часовой пояс"
@@ -197,7 +213,7 @@ declare -A CUSTOM_HINT=(
 CUSTOM_STEPS=("${GNOME_STEPS[@]}" "${HYPR_STEPS[@]}" "${XFCE_STEPS[@]}")
 
 # Что можно откатить (приложения + настройка системы; обновление системы откату не подлежит)
-REVERT_STEPS=(claude discord telegram keepassxc torbrowser obsidian happ amnezia docker deepseek graphify hexstrike hayabusa takajo volatility netexec certipy responder bloodhound seclists ffuf gobuster time keyboard nolock touchpad gnome gnomeext hyprland xtheme xpanel xpicom xextras)
+REVERT_STEPS=(claude discord telegram keepassxc torbrowser obsidian happ amnezia docker deepseek graphify hexstrike hayabusa takajo volatility netexec certipy responder bloodhound seclists ffuf gobuster bbr wifipower dns time keyboard nolock touchpad gnome gnomeext hyprland xtheme xpanel xpicom xextras)
 declare -A REVERT_DESC=(
     [claude]="Удалить Claude Desktop"
     [discord]="Удалить Discord"
@@ -221,6 +237,9 @@ declare -A REVERT_DESC=(
     [seclists]="Удалить SecLists (если ставил скрипт)"
     [ffuf]="Удалить ffuf (если ставил скрипт)"
     [gobuster]="Удалить gobuster (если ставил скрипт)"
+    [bbr]="Вернуть прежние параметры TCP"
+    [wifipower]="Вернуть энергосбережение Wi-Fi"
+    [dns]="Вернуть DNS из сети (DHCP)"
     [time]="Вернуть часовой пояс, синхронизацию и формат часов"
     [keyboard]="Вернуть прежние раскладки клавиатуры"
     [nolock]="Вернуть блокировку экрана по времени"
@@ -263,6 +282,9 @@ run_step() {
         seclists)  do_seclists ;;
         ffuf)      do_ffuf ;;
         gobuster)  do_gobuster ;;
+        bbr)       do_net_bbr ;;
+        wifipower) do_net_wifipower ;;
+        dns)       do_net_dns ;;
         time)      do_set_time ;;
         keyboard)  do_set_keyboard ;;
         nolock)    do_set_nolock ;;
@@ -324,6 +346,10 @@ confirm_summary() {
                 if [[ ${#WEB_CHOSEN[@]} -gt 0 ]]; then
                     for a in "${WEB_CHOSEN[@]}"; do msg+="      - ${WEB_DESC[$a]}\n"; done
                 else msg+="      (веб-пентест не выбран)\n"; fi ;;
+            network)
+                if [[ ${#NETWORK_CHOSEN[@]} -gt 0 ]]; then
+                    for a in "${NETWORK_CHOSEN[@]}"; do msg+="      - ${NETWORK_DESC[$a]}\n"; done
+                else msg+="      (пункты сети не выбраны)\n"; fi ;;
             settings)
                 if [[ ${#SETTINGS_CHOSEN[@]} -gt 0 ]]; then
                     for a in "${SETTINGS_CHOSEN[@]}"; do msg+="      - ${SETTINGS_DESC[$a]}\n"; done
@@ -367,7 +393,7 @@ back_to_start() {
     sleep 1.2
 }
 
-CAT_CHOSEN=(); CAT_ORDER=(); APP_CHOSEN=(); AI_CHOSEN=(); FORENSICS_CHOSEN=(); PENTEST_CHOSEN=(); WEB_CHOSEN=(); SETTINGS_CHOSEN=(); CUSTOM_CHOSEN=(); REVERT_CHOSEN=()
+CAT_CHOSEN=(); CAT_ORDER=(); APP_CHOSEN=(); AI_CHOSEN=(); FORENSICS_CHOSEN=(); PENTEST_CHOSEN=(); WEB_CHOSEN=(); NETWORK_CHOSEN=(); SETTINGS_CHOSEN=(); CUSTOM_CHOSEN=(); REVERT_CHOSEN=()
 run_wizard() {
     if ! ui_gum && ! have whiptail; then
         warn "Нет ни gum, ни whiptail — ставлю всё по умолчанию (без меню)."
@@ -379,7 +405,7 @@ run_wizard() {
     # 1–4) выбор. Пустой список, Esc или «Отмена» — назад, на первый экран
     local c good
     while true; do
-        APP_CHOSEN=(); AI_CHOSEN=(); FORENSICS_CHOSEN=(); PENTEST_CHOSEN=(); WEB_CHOSEN=(); SETTINGS_CHOSEN=(); CUSTOM_CHOSEN=(); REVERT_CHOSEN=()
+        APP_CHOSEN=(); AI_CHOSEN=(); FORENSICS_CHOSEN=(); PENTEST_CHOSEN=(); WEB_CHOSEN=(); NETWORK_CHOSEN=(); SETTINGS_CHOSEN=(); CUSTOM_CHOSEN=(); REVERT_CHOSEN=()
         ui_checklist "Что будем делать?" "Отметь нужные этапы" MAIN_MENU CAT_DESC CAT_CHOSEN \
             || { warn "Выход."; exit 0; }
         [[ " ${CAT_CHOSEN[*]} " == *" exit "* ]] && { ok "Выход."; exit 0; }
@@ -398,6 +424,8 @@ run_wizard() {
                               PENTEST_STEPS PENTEST_DESC PENTEST_CHOSEN && [[ ${#PENTEST_CHOSEN[@]} -gt 0 ]] || good=0 ;;
                 web)      ui_checklist "Веб-пентест" "Что поставить?" \
                               WEB_STEPS WEB_DESC WEB_CHOSEN && [[ ${#WEB_CHOSEN[@]} -gt 0 ]] || good=0 ;;
+                network)  ui_checklist "Сеть" "Что настроить? (DNS-провайдера спрошу при установке)" \
+                              NETWORK_STEPS NETWORK_DESC NETWORK_CHOSEN && [[ ${#NETWORK_CHOSEN[@]} -gt 0 ]] || good=0 ;;
                 settings) ui_checklist "Настройка системы" "Что настроить?" \
                               SETTINGS_STEPS SETTINGS_DESC SETTINGS_CHOSEN && [[ ${#SETTINGS_CHOSEN[@]} -gt 0 ]] || good=0 ;;
                 custom)   pick_custom || good=0 ;;
@@ -424,6 +452,7 @@ run_wizard() {
                     for a in "${FORENSICS_CHOSEN[@]}"; do run_step "$a" || warn "Шаг '$a' с ошибкой."; done ;;
             pentest) for a in "${PENTEST_CHOSEN[@]}"; do run_step "$a" || warn "Шаг '$a' с ошибкой."; done ;;
             web)    for a in "${WEB_CHOSEN[@]}"; do run_step "$a" || warn "Шаг '$a' с ошибкой."; done ;;
+            network) for a in "${NETWORK_CHOSEN[@]}"; do run_step "$a" || warn "Шаг '$a' с ошибкой."; done ;;
             settings) for a in "${SETTINGS_CHOSEN[@]}"; do run_step "$a" || warn "Шаг '$a' с ошибкой."; done ;;
             custom) for a in "${CUSTOM_CHOSEN[@]}"; do run_step "$a" || warn "Шаг '$a' с ошибкой."; done ;;
             revert) for a in "${REVERT_CHOSEN[@]}"; do run_undo "$a" || warn "Откат '$a' с ошибкой."; done ;;
