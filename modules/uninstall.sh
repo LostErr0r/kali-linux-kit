@@ -69,6 +69,29 @@ undo_amnezia() {
 }
 
 # ----------------------------------------------------------------------------
+# Откат форензики и пентеста AD
+# ----------------------------------------------------------------------------
+undo_hayabusa() {
+    step "Откат: Hayabusa"
+    sudo rm -rf "${FORENSICS_DIR}/hayabusa" /usr/local/bin/hayabusa
+    ok "Hayabusa удалена (вместе с правилами в ${FORENSICS_DIR}/hayabusa)."
+}
+
+undo_takajo() {
+    step "Откат: Takajo"
+    sudo rm -rf "${FORENSICS_DIR}/takajo" /usr/local/bin/takajo
+    ok "Takajo удалён."
+}
+
+undo_netexec()    { pentest_undo_apt netexec "NetExec"; }
+undo_certipy()    { pentest_undo_apt certipy "Certipy"; }
+undo_responder()  { pentest_undo_apt responder "Responder"; }
+undo_bloodhound() {
+    pentest_undo_apt bloodhound "BloodHound"
+    log "neo4j и postgresql удаляются вместе с пакетом, только если их больше ничего не использует (apt autoremove)."
+}
+
+# ----------------------------------------------------------------------------
 # Откат настройки системы
 # ----------------------------------------------------------------------------
 undo_time() {
@@ -106,6 +129,20 @@ undo_nolock() {
         xfconf_restore xfce4-power-manager "/xfce4-power-manager/$p"
     done
     ok "Блокировка и гашение экрана по таймеру возвращены."
+}
+
+undo_touchpad() {
+    step "Откат: тачпад"
+    local d
+    for d in $(state_get touchpad.devices); do
+        xfconf_restore pointers "/${d}/Acceleration"
+        xfconf_restore pointers "/${d}/Properties/libinput_Disable_While_Typing_Enabled"
+        xfconf_restore pointers "/${d}/Properties/libinput_Tapping_Enabled"
+        xfconf_restore pointers "/${d}/Properties/libinput_Click_Method_Enabled" int
+        xfconf_restore pointers "/${d}/Properties/libinput_Scroll_Method_Enabled" int
+    done
+    state_del touchpad.devices
+    ok "Настройки тачпада возвращены как были."
 }
 
 # ----------------------------------------------------------------------------
@@ -263,9 +300,16 @@ run_undo() {
         docker)    undo_docker ;;
         deepseek)  undo_deepseek ;;
         graphify)  undo_graphify ;;
+        hayabusa)  undo_hayabusa ;;
+        takajo)    undo_takajo ;;
+        netexec)   undo_netexec ;;
+        certipy)   undo_certipy ;;
+        responder) undo_responder ;;
+        bloodhound) undo_bloodhound ;;
         time)      undo_time ;;
         keyboard)  undo_keyboard ;;
         nolock)    undo_nolock ;;
+        touchpad)  undo_touchpad ;;
         gnome)     undo_gnome ;;
         gnomeext)  undo_gnomeext ;;
         hyprland)  undo_hyprland ;;

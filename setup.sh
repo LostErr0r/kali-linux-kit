@@ -8,6 +8,8 @@
 #   modules/system.sh    — обновление системы, базовые пакеты
 #   modules/apps.sh      — приложения
 #   modules/ai.sh        — AI: Claude Desktop, DeepSeek Harness, Graphify, HexStrike AI
+#   modules/forensics.sh — форензика: Hayabusa, Takajo
+#   modules/pentest.sh   — пентест AD: NetExec, Certipy, Responder, BloodHound
 #   modules/settings.sh  — настройка системы (время, клавиатура, блокировка экрана)
 #   modules/custom.sh    — кастомизация: GNOME, Hyprland, XFCE (подпункты)
 #   modules/uninstall.sh — откат (удалить/вернуть назад)
@@ -28,7 +30,7 @@ set -uo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/lib/common.sh"
 source "${SCRIPT_DIR}/lib/ui.sh"
-for _m in system apps ai settings custom uninstall; do
+for _m in system apps ai forensics pentest settings custom uninstall; do
     source "${SCRIPT_DIR}/modules/${_m}.sh"
 done
 unset _m
@@ -37,11 +39,13 @@ unset _m
 # Данные для меню
 # ----------------------------------------------------------------------------
 # Меню: *_DESC — короткое название (оно же в сводке), *_HINT — пояснение серым рядом
-CATEGORIES=(update apps ai settings custom revert)
+CATEGORIES=(update apps ai forensics pentest settings custom revert)
 declare -A CAT_DESC=(
     [update]="Обновление системы"
     [apps]="Приложения"
     [ai]="AI-инструменты"
+    [forensics]="Форензика"
+    [pentest]="Пентест AD"
     [settings]="Настройка системы"
     [custom]="Кастомизация"
     [revert]="Откат"
@@ -51,7 +55,9 @@ declare -A CAT_HINT=(
     [update]="полный апгрейд: apt full-upgrade + чистка"
     [apps]="Discord, Telegram, KeePassXC, Tor, VPN, Docker"
     [ai]="Claude Desktop, DeepSeek, Graphify, HexStrike"
-    [settings]="часовой пояс, раскладка RU, блокировка экрана"
+    [forensics]="журналы Windows: Hayabusa + отчёты Takajo"
+    [pentest]="NetExec, Certipy, Responder, BloodHound"
+    [settings]="часовой пояс, раскладка RU, блокировка экрана, тачпад"
     [custom]="внешний вид: GNOME, Hyprland или XFCE"
     [revert]="удалить поставленное, вернуть настройки"
     [exit]="закрыть скрипт, ничего не меняя"
@@ -97,16 +103,44 @@ declare -A AI_HINT=(
     [hexstrike]="MCP-сервер с инструментами пентеста для AI"
 )
 
-SETTINGS_STEPS=(time keyboard nolock)
+# Форензика: разбор журналов Windows (.evtx) и отчёты по таймлайну
+FORENSICS_STEPS=(hayabusa takajo)
+declare -A FORENSICS_DESC=(
+    [hayabusa]="Hayabusa"
+    [takajo]="Takajo"
+)
+declare -A FORENSICS_HINT=(
+    [hayabusa]="таймлайн и детекты из .evtx по правилам Sigma"
+    [takajo]="HTML-отчёты и сводки по результатам Hayabusa"
+)
+
+# Пентест Active Directory (всё из репозитория Kali)
+PENTEST_STEPS=(netexec certipy responder bloodhound)
+declare -A PENTEST_DESC=(
+    [netexec]="NetExec"
+    [certipy]="Certipy"
+    [responder]="Responder"
+    [bloodhound]="BloodHound CE"
+)
+declare -A PENTEST_HINT=(
+    [netexec]="nxc: SMB, LDAP, WinRM, MSSQL по всей сети"
+    [certipy]="уязвимые шаблоны сертификатов AD CS"
+    [responder]="перехват LLMNR/NBT-NS, сбор NTLM-хэшей"
+    [bloodhound]="граф путей до Domain Admin + сборщик"
+)
+
+SETTINGS_STEPS=(time keyboard nolock touchpad)
 declare -A SETTINGS_DESC=(
     [time]="Часовой пояс"
     [keyboard]="Раскладка"
     [nolock]="Блокировка экрана"
+    [touchpad]="Тачпад (ноутбук)"
 )
 declare -A SETTINGS_HINT=(
     [time]="город, синхронизация NTP, секунды в часах"
     [keyboard]="вторая раскладка RU, переключение Win+Space"
     [nolock]="экран не гаснет и не блокируется сам"
+    [touchpad]="ускорение 5.9, тап, клик 1/2/3 пальцами, скролл двумя"
 )
 
 # Кастомизация: сначала выбирается окружение (группа), затем его подпункты
@@ -145,7 +179,7 @@ declare -A CUSTOM_HINT=(
 CUSTOM_STEPS=("${GNOME_STEPS[@]}" "${HYPR_STEPS[@]}" "${XFCE_STEPS[@]}")
 
 # Что можно откатить (приложения + настройка системы; обновление системы откату не подлежит)
-REVERT_STEPS=(claude discord telegram keepassxc torbrowser obsidian happ amnezia docker deepseek graphify hexstrike time keyboard nolock gnome gnomeext hyprland xtheme xpanel xpicom xextras)
+REVERT_STEPS=(claude discord telegram keepassxc torbrowser obsidian happ amnezia docker deepseek graphify hexstrike hayabusa takajo netexec certipy responder bloodhound time keyboard nolock touchpad gnome gnomeext hyprland xtheme xpanel xpicom xextras)
 declare -A REVERT_DESC=(
     [claude]="Удалить Claude Desktop"
     [discord]="Удалить Discord"
@@ -159,9 +193,16 @@ declare -A REVERT_DESC=(
     [docker]="Удалить Docker"
     [deepseek]="Удалить DeepSeek Harness (dsh)"
     [graphify]="Удалить Graphify (CLI)"
+    [hayabusa]="Удалить Hayabusa"
+    [takajo]="Удалить Takajo"
+    [netexec]="Удалить NetExec (если ставил скрипт)"
+    [certipy]="Удалить Certipy (если ставил скрипт)"
+    [responder]="Удалить Responder (если ставил скрипт)"
+    [bloodhound]="Удалить BloodHound (если ставил скрипт)"
     [time]="Вернуть часовой пояс, синхронизацию и формат часов"
     [keyboard]="Вернуть прежние раскладки клавиатуры"
     [nolock]="Вернуть блокировку экрана по времени"
+    [touchpad]="Вернуть прежние настройки тачпада"
     [gnome]="Удалить GNOME (если ставил скрипт)"
     [gnomeext]="Удалить расширения GNOME, вернуть список включённых"
     [hyprland]="Удалить Hyprland, вернуть прежние конфиги ~/.config"
@@ -190,9 +231,16 @@ run_step() {
         docker)    do_docker ;;
         deepseek)  do_deepseek ;;
         graphify)  do_graphify ;;
+        hayabusa)  do_hayabusa ;;
+        takajo)    do_takajo ;;
+        netexec)   do_netexec ;;
+        certipy)   do_certipy ;;
+        responder) do_responder ;;
+        bloodhound) do_bloodhound ;;
         time)      do_set_time ;;
         keyboard)  do_set_keyboard ;;
         nolock)    do_set_nolock ;;
+        touchpad)  do_set_touchpad ;;
         gnome)     do_custom_gnome ;;
         gnomeext)  do_custom_gnomeext ;;
         hyprland)  do_custom_hyprland ;;
@@ -238,6 +286,14 @@ confirm_summary() {
                 if [[ ${#AI_CHOSEN[@]} -gt 0 ]]; then
                     for a in "${AI_CHOSEN[@]}"; do msg+="      - ${AI_DESC[$a]}\n"; done
                 else msg+="      (AI не выбран)\n"; fi ;;
+            forensics)
+                if [[ ${#FORENSICS_CHOSEN[@]} -gt 0 ]]; then
+                    for a in "${FORENSICS_CHOSEN[@]}"; do msg+="      - ${FORENSICS_DESC[$a]}\n"; done
+                else msg+="      (форензика не выбрана)\n"; fi ;;
+            pentest)
+                if [[ ${#PENTEST_CHOSEN[@]} -gt 0 ]]; then
+                    for a in "${PENTEST_CHOSEN[@]}"; do msg+="      - ${PENTEST_DESC[$a]}\n"; done
+                else msg+="      (пентест не выбран)\n"; fi ;;
             settings)
                 if [[ ${#SETTINGS_CHOSEN[@]} -gt 0 ]]; then
                     for a in "${SETTINGS_CHOSEN[@]}"; do msg+="      - ${SETTINGS_DESC[$a]}\n"; done
@@ -281,7 +337,7 @@ back_to_start() {
     sleep 1.2
 }
 
-CAT_CHOSEN=(); CAT_ORDER=(); APP_CHOSEN=(); AI_CHOSEN=(); SETTINGS_CHOSEN=(); CUSTOM_CHOSEN=(); REVERT_CHOSEN=()
+CAT_CHOSEN=(); CAT_ORDER=(); APP_CHOSEN=(); AI_CHOSEN=(); FORENSICS_CHOSEN=(); PENTEST_CHOSEN=(); SETTINGS_CHOSEN=(); CUSTOM_CHOSEN=(); REVERT_CHOSEN=()
 run_wizard() {
     if ! ui_gum && ! have whiptail; then
         warn "Нет ни gum, ни whiptail — ставлю всё по умолчанию (без меню)."
@@ -293,7 +349,7 @@ run_wizard() {
     # 1–4) выбор. Пустой список, Esc или «Отмена» — назад, на первый экран
     local c good
     while true; do
-        APP_CHOSEN=(); AI_CHOSEN=(); SETTINGS_CHOSEN=(); CUSTOM_CHOSEN=(); REVERT_CHOSEN=()
+        APP_CHOSEN=(); AI_CHOSEN=(); FORENSICS_CHOSEN=(); PENTEST_CHOSEN=(); SETTINGS_CHOSEN=(); CUSTOM_CHOSEN=(); REVERT_CHOSEN=()
         ui_checklist "Что будем делать?" "Отметь нужные этапы" MAIN_MENU CAT_DESC CAT_CHOSEN \
             || { warn "Выход."; exit 0; }
         [[ " ${CAT_CHOSEN[*]} " == *" exit "* ]] && { ok "Выход."; exit 0; }
@@ -306,6 +362,10 @@ run_wizard() {
                               APP_STEPS APP_DESC APP_CHOSEN && [[ ${#APP_CHOSEN[@]} -gt 0 ]] || good=0 ;;
                 ai)       ui_checklist "AI: модели и инструменты" "Что поставить?" \
                               AI_STEPS AI_DESC AI_CHOSEN && [[ ${#AI_CHOSEN[@]} -gt 0 ]] || good=0 ;;
+                forensics) ui_checklist "Форензика" "Что поставить?" \
+                              FORENSICS_STEPS FORENSICS_DESC FORENSICS_CHOSEN && [[ ${#FORENSICS_CHOSEN[@]} -gt 0 ]] || good=0 ;;
+                pentest)  ui_checklist "Пентест Active Directory" "Что поставить?" \
+                              PENTEST_STEPS PENTEST_DESC PENTEST_CHOSEN && [[ ${#PENTEST_CHOSEN[@]} -gt 0 ]] || good=0 ;;
                 settings) ui_checklist "Настройка системы" "Что настроить?" \
                               SETTINGS_STEPS SETTINGS_DESC SETTINGS_CHOSEN && [[ ${#SETTINGS_CHOSEN[@]} -gt 0 ]] || good=0 ;;
                 custom)   pick_custom || good=0 ;;
@@ -328,6 +388,9 @@ run_wizard() {
                     for a in "${APP_CHOSEN[@]}"; do run_step "$a" || warn "Шаг '$a' с ошибкой."; done ;;
             ai)     do_base   # python3/pipx/curl нужны для AI-инструментов
                     for a in "${AI_CHOSEN[@]}"; do run_step "$a" || warn "Шаг '$a' с ошибкой."; done ;;
+            forensics) do_base   # curl/unzip для релизов с GitHub
+                    for a in "${FORENSICS_CHOSEN[@]}"; do run_step "$a" || warn "Шаг '$a' с ошибкой."; done ;;
+            pentest) for a in "${PENTEST_CHOSEN[@]}"; do run_step "$a" || warn "Шаг '$a' с ошибкой."; done ;;
             settings) for a in "${SETTINGS_CHOSEN[@]}"; do run_step "$a" || warn "Шаг '$a' с ошибкой."; done ;;
             custom) for a in "${CUSTOM_CHOSEN[@]}"; do run_step "$a" || warn "Шаг '$a' с ошибкой."; done ;;
             revert) for a in "${REVERT_CHOSEN[@]}"; do run_undo "$a" || warn "Откат '$a' с ошибкой."; done ;;

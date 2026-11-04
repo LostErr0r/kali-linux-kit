@@ -167,18 +167,45 @@ xfconf_set() {
         || xfconf-query -c "$ch" -p "$prop" -n -t "$type" -s "$val"
 }
 
-#   xfconf_restore <канал> <свойство> — вернуть как было до xfconf_set
+#   xfconf_set_array <канал> <свойство> <тип> <значение>... — то же для свойства-массива
+xfconf_set_array() {
+    local ch="$1" prop="$2" type="$3" key cur v args=()
+    shift 3
+    key="xfconf.${ch}${prop//\//.}"
+    # xfconf-query печатает массив как «Value is an array with N items:», пустую строку и значения
+    if cur="$(xfconf-query -c "$ch" -p "$prop" 2>/dev/null)"; then
+        state_set_once "$key" "a:$(tail -n +3 <<<"$cur" | tr '\n' ' ')"
+    else
+        state_set_once "$key" "absent"
+    fi
+    for v in "$@"; do args+=(-t "$type" -s "$v"); done
+    xfconf-query -c "$ch" -p "$prop" -r 2>/dev/null || true
+    xfconf-query -c "$ch" -p "$prop" -n -a "${args[@]}"
+}
+
+#   xfconf_restore <канал> <свойство> — вернуть как было до xfconf_set / xfconf_set_array
 xfconf_restore() {
-    local ch="$1" prop="$2" key val
+    local ch="$1" prop="$2" key val type v args=()
     key="xfconf.${ch}${prop//\//.}"
     state_has "$key" || return 0
     val="$(state_get "$key")"
     if [[ "$val" == absent ]]; then
         xfconf-query -c "$ch" -p "$prop" -r 2>/dev/null || true
+    elif [[ "$val" == a:* ]]; then
+        type="${3:-int}"
+        for v in ${val#a:}; do args+=(-t "$type" -s "$v"); done
+        xfconf-query -c "$ch" -p "$prop" -r 2>/dev/null || true
+        [[ ${#args[@]} -gt 0 ]] && xfconf-query -c "$ch" -p "$prop" -n -a "${args[@]}" 2>/dev/null || true
     else
         xfconf-query -c "$ch" -p "$prop" -s "${val#v:}" 2>/dev/null || true
     fi
     state_del "$key"
+}
+
+# Тачпады в канале pointers (имя устройства с «_» вместо пробелов, как в xfce4-mouse-settings)
+xfce_touchpads() {
+    have xinput || return 0
+    xinput list --name-only 2>/dev/null | grep -i 'touchpad' | sed 's/[ /]/_/g' | sort -u
 }
 
 # Пути плагинов «Часы» на панели XFCE (/plugins/plugin-N)

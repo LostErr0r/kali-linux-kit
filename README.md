@@ -3,7 +3,7 @@
 **Русский** · [English](#english)
 
 Скрипт для быстрой настройки свежей Kali Linux (в т.ч. на флэшке): обновление системы,
-установка приложений и AI-инструментов, настройка системы. У каждого шага есть откат.
+установка приложений, AI-инструментов, форензики и инструментов пентеста AD, настройка системы. У каждого шага есть откат.
 
 ## Быстрый старт
 
@@ -54,14 +54,38 @@ cd kali-new
 | `graphify` | Graphify — граф кодовой базы, скил `/graphify` |
 | `hexstrike` | HexStrike AI — MCP-сервер для AI-ассистента |
 
+### Форензика
+Разбор журналов Windows (`.evtx`), собранных с машины. KAPE и Timeline Explorer работают только под Windows, поэтому их нет: журналы разбирает Hayabusa, а отчёты строит Takajo.
+
+| Ключ | Что ставится |
+|---|---|
+| `hayabusa` | Hayabusa — таймлайн и детекты по правилам Sigma (релиз с GitHub в `/opt/hayabusa`, команда `hayabusa`) |
+| `takajo` | Takajo — HTML-отчёты и сводки по результатам Hayabusa (релиз с GitHub в `/opt/takajo`, команда `takajo`) |
+
+```bash
+hayabusa json-timeline -d ./logs -L -o timeline.jsonl
+takajo html-report -t timeline.jsonl -o report
+```
+
+### Пентест AD
+Всё ставится из репозитория Kali. Если пакет уже стоял до скрипта, откат его не удаляет.
+
+| Ключ | Что ставится |
+|---|---|
+| `netexec` | NetExec (`nxc`) — SMB, LDAP, WinRM, MSSQL, RDP, SSH |
+| `certipy` | Certipy (`certipy-ad`) — поиск и эксплуатация уязвимостей AD CS |
+| `responder` | Responder — перехват LLMNR/NBT-NS/mDNS, сбор NTLM-хэшей |
+| `bloodhound` | BloodHound CE + сборщик `bloodhound-ce-python`. Первый запуск: `sudo bloodhound-setup`, потом `bloodhound` |
+
 ### Настройка системы
 | Ключ | Что делает |
 |---|---|
 | `time` | Часовой пояс (выбор: регион → город), синхронизация по NTP, секунды в часах на панели |
 | `keyboard` | Вторая раскладка Russian, переключение **Win+Space** |
 | `nolock` | Экран не блокируется и не гаснет по таймеру (ручная блокировка работает) |
+| `touchpad` | Для ноутбука: ускорение тачпада 5.9, в General всё включено (тап, отключение при наборе), клик 1/2/3 пальцами, прокрутка двумя пальцами |
 
-`keyboard`, `nolock` и секунды в часах рассчитаны на XFCE.
+`keyboard`, `nolock`, `touchpad` и секунды в часах рассчитаны на XFCE.
 
 ### Кастомизация
 Сначала выбираешь окружение, потом его подпункты.
@@ -109,6 +133,8 @@ modules/
   system.sh           — обновление системы, базовые пакеты
   apps.sh             — приложения
   ai.sh               — AI-инструменты
+  forensics.sh        — форензика: Hayabusa, Takajo
+  pentest.sh          — пентест AD: NetExec, Certipy, Responder, BloodHound
   settings.sh         — настройка системы
   custom.sh           — кастомизация: GNOME, Hyprland, XFCE
   uninstall.sh        — откат всех шагов
@@ -126,7 +152,7 @@ modules/
 [Русский](#kali-new) · **English**
 
 A script for quickly setting up a fresh Kali Linux install (including a live USB): system update,
-apps and AI tools, system tweaks. Every step can be rolled back.
+apps, AI tools, forensics and AD pentest tools, system tweaks. Every step can be rolled back.
 
 ### Quick start
 
@@ -179,14 +205,38 @@ are installed automatically before apps and AI tools.
 | `graphify` | Graphify — codebase knowledge graph, `/graphify` skill |
 | `hexstrike` | HexStrike AI — MCP server for an AI assistant |
 
+#### Forensics
+Parsing Windows event logs (`.evtx`) collected from a machine. KAPE and Timeline Explorer are Windows-only, so they're not here: Hayabusa parses the logs and Takajo builds the reports.
+
+| Key | What gets installed |
+|---|---|
+| `hayabusa` | Hayabusa — timeline and Sigma-rule detections (GitHub release in `/opt/hayabusa`, command `hayabusa`) |
+| `takajo` | Takajo — HTML reports and summaries from Hayabusa results (GitHub release in `/opt/takajo`, command `takajo`) |
+
+```bash
+hayabusa json-timeline -d ./logs -L -o timeline.jsonl
+takajo html-report -t timeline.jsonl -o report
+```
+
+#### AD pentest
+Everything comes from the Kali repository. If a package was already installed before the script, rollback leaves it alone.
+
+| Key | What gets installed |
+|---|---|
+| `netexec` | NetExec (`nxc`) — SMB, LDAP, WinRM, MSSQL, RDP, SSH |
+| `certipy` | Certipy (`certipy-ad`) — finding and exploiting AD CS weaknesses |
+| `responder` | Responder — LLMNR/NBT-NS/mDNS poisoning, NTLM hash capture |
+| `bloodhound` | BloodHound CE + the `bloodhound-ce-python` collector. First run: `sudo bloodhound-setup`, then `bloodhound` |
+
 #### System settings
 | Key | What it does |
 |---|---|
 | `time` | Time zone (pick region → city), NTP sync, seconds in the panel clock |
 | `keyboard` | Adds a Russian layout, switch with **Win+Space** |
 | `nolock` | Screen doesn't lock or blank on a timer (manual lock still works) |
+| `touchpad` | For laptops: touchpad acceleration 5.9, all General options on (tap to click, disable while typing), click with 1/2/3 fingers, two-finger scrolling |
 
-`keyboard`, `nolock` and the clock seconds are made for XFCE.
+`keyboard`, `nolock`, `touchpad` and the clock seconds are made for XFCE.
 
 #### Customization
 First pick a desktop environment, then its items.
@@ -234,6 +284,8 @@ modules/
   system.sh           — system update, base packages
   apps.sh             — apps
   ai.sh               — AI tools
+  forensics.sh        — forensics: Hayabusa, Takajo
+  pentest.sh          — AD pentest: NetExec, Certipy, Responder, BloodHound
   settings.sh         — system settings
   custom.sh           — customization: GNOME, Hyprland, XFCE
   uninstall.sh        — rollback for all steps

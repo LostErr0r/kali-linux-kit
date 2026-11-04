@@ -90,3 +90,30 @@ do_set_nolock() {
     have xset && [[ -n "${DISPLAY:-}" ]] && xset s off -dpms 2>/dev/null || true
     ok "Блокировка и гашение экрана по времени: никогда"
 }
+
+# Для ноутбука: ускорение 5.9, все галочки General, клик 1/2/3 пальцами, прокрутка двумя пальцами
+do_set_touchpad() {
+    step "Настройка: тачпад ноутбука"
+    if ! have_xfce; then
+        warn "Не XFCE — тачпад не настраиваю."
+        return 0
+    fi
+    local pads d
+    pads="$(xfce_touchpads)"
+    if [[ -z "$pads" ]]; then
+        warn "Тачпад не найден (не ноутбук?) — пропускаю."
+        return 0
+    fi
+    for d in $pads; do
+        xfconf_set pointers "/${d}/Acceleration" double 5.9
+        # General: отключать во время набора текста, тап = клик
+        xfconf_set pointers "/${d}/Properties/libinput_Disable_While_Typing_Enabled" int 1
+        xfconf_set pointers "/${d}/Properties/libinput_Tapping_Enabled" int 1
+        # Click method: 1/2/3 пальца (clickfinger), а не зоны кнопок
+        xfconf_set_array pointers "/${d}/Properties/libinput_Click_Method_Enabled" int 0 1
+        # Scroll method: two-finger
+        xfconf_set_array pointers "/${d}/Properties/libinput_Scroll_Method_Enabled" int 1 0 0
+        ok "Тачпад ${d}: ускорение 5.9, тап, клик пальцами, прокрутка двумя пальцами"
+    done
+    state_set_once touchpad.devices "$pads"
+}
